@@ -11,15 +11,35 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Appcolegios">
+        <!-- Pantalla de Splash como lanzador -->
         <activity
-            android:name=".MainActivity"
+            android:name=".auth.SplashActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Auth activities -->
+        <activity android:name=".auth.LoginActivity" android:exported="false" />
+        <activity android:name=".auth.RegisterActivity" android:exported="false" />
+        <activity android:name=".auth.ResetPasswordActivity" android:exported="false" />
+        <!-- Home -->
+        <activity android:name=".ui.HomeActivity" android:exported="false" />
+        <activity android:name=".ui.ProfileActivity" android:exported="false" />
+        <activity android:name=".ui.GradesActivity" android:exported="false" />
+        <activity android:name=".ui.AttendanceActivity" android:exported="false" />
+        <activity android:name=".ui.TasksActivity" android:exported="false" />
+        <activity android:name=".ui.CalendarActivity" android:exported="false" />
+        <activity android:name=".ui.ScheduleActivity" android:exported="false" />
+        <activity android:name=".ui.EventsActivity" android:exported="false" />
+        <activity android:name=".notificaciones.NotificationsActivity" android:exported="false" />
+        <activity android:name=".mensajes.ConversationsActivity" android:exported="false" />
+        <activity android:name=".mensajes.ChatActivity" android:exported="false" />
+        <activity android:name=".pagos.PaymentsActivity" android:exported="false" />
+        <activity android:name=".transporte.TransportActivity" android:exported="false" />
+        <activity android:name=".perfil.AcademicInfoActivity" android:exported="false" />
+        <!-- ...otros componentes existentes... -->
     </application>
 
 </manifest>

@@ -7,6 +7,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.example.appcolegios.R
+import com.example.appcolegios.academico.GradesScreen
+import com.example.appcolegios.academico.AttendanceScreen
+import com.example.appcolegios.academico.HomeworkScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,9 +37,9 @@ fun AcademicInfoScreen() {
                 }
             }
             when (tabIndex) {
-                0 -> Text("Contenido de Notas")
-                1 -> Text("Contenido de Asistencia")
-                2 -> Text("Contenido de Tareas")
+                0 -> GradesScreen()
+                1 -> AttendanceScreen()
+                2 -> HomeworkScreen()
             }
         }
     }

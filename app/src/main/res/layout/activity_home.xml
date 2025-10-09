@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bienvenido"
+            android:textSize="24sp"
+            android:layout_gravity="center" />
+
+        <!-- Secciones -->
+        <Button
+            android:id="@+id/btnGrades"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notas"
+            android:layout_marginTop="16dp" />
+        <Button
+            android:id="@+id/btnAttendance"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Asistencia"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnTasks"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tareas"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnCalendar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Calendario"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnSchedule"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Horario"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnEvents"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Eventos"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnNotifications"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Notificaciones"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnMessages"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mensajes"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnPayments"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pagos"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnTransport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Transporte"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnProfile"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Perfil"
+            android:layout_marginTop="8dp" />
+        <Button
+            android:id="@+id/btnAcademicInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Mi información académica"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+</ScrollView>
