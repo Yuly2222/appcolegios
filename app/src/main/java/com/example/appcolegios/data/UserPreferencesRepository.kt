@@ -60,7 +60,3 @@ data class UserData(
 ) {
     val roleEnum: Role? get() = Role.fromString(role)
 }
-
-suspend fun UserPreferencesRepository.updateUserData(userId: String?, role: Role?) {
-    updateUserData(userId, role?.name)
-}

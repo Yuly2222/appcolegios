@@ -8,6 +8,7 @@ import com.example.appcolegios.data.model.MessageStatus
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.ListenerRegistration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -27,6 +28,9 @@ class ChatViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState
 
+    private var messagesListener: ListenerRegistration? = null
+    private var currentConversationId: String? = null
+
     fun loadMessages(conversationId: String) {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid
@@ -35,10 +39,26 @@ class ChatViewModel : ViewModel() {
                 return@launch
             }
 
-            // In a real app, conversationId would be a unique ID for the chat thread.
-            // We'll listen for real-time updates.
+            if (conversationId.isBlank() || conversationId.equals("unknown", ignoreCase = true)) {
+                // Evitamos crear listeners innecesarios
+                _uiState.value = ChatUiState(messages = emptyList(), isLoading = false, error = null)
+                return@launch
+            }
+
+            if (currentConversationId == conversationId && messagesListener != null) {
+                // Ya tenemos un listener activo para esta conversación
+                return@launch
+            }
+
+            // Cambiamos de conversación: limpiar listener anterior
+            messagesListener?.remove()
+            messagesListener = null
+            currentConversationId = conversationId
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
             val conversationRef = db.collection("chats").document(conversationId).collection("messages")
-            conversationRef.orderBy("fechaHora", Query.Direction.ASCENDING)
+            messagesListener = conversationRef
+                .orderBy("fechaHora", Query.Direction.ASCENDING)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         _uiState.value = ChatUiState(isLoading = false, error = error.message)
@@ -47,6 +67,8 @@ class ChatViewModel : ViewModel() {
                     if (snapshot != null) {
                         val messages = snapshot.toObjects(Message::class.java)
                         _uiState.value = ChatUiState(messages = messages, isLoading = false)
+                    } else {
+                        _uiState.value = ChatUiState(messages = emptyList(), isLoading = false)
                     }
                 }
         }
@@ -68,8 +90,14 @@ class ChatViewModel : ViewModel() {
                 db.collection("chats").document(conversationId)
                     .collection("messages").add(message).await()
             } catch (_: Exception) {
-                // Ignorado o se podría loggear
+                // Se podría loggear el error o actualizar estado
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        messagesListener?.remove()
+        messagesListener = null
     }
 }

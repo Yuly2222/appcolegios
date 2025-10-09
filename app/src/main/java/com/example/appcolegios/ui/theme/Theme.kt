@@ -48,8 +48,10 @@ fun AppColegiosTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            @Suppress("DEPRECATION")
+            run { window.statusBarColor = colorScheme.primary.toArgb() }
+            // Íconos oscuros en status bar cuando el tema es claro
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 

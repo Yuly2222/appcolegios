@@ -1,23 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Refuerzo de strings académicos para resolver referencias -->
-    <string name="error_label">Error</string>
-    <string name="promedio_global">Promedio global</string>
-    <string name="no_tasks_for_today">No hay tareas para hoy</string>
-    <string name="no_clases_dia">No hay clases este día</string>
-    <string name="aula_label">Aula</string>
-    <string name="mes_anterior">Mes anterior</string>
-    <string name="mes_siguiente">Mes siguiente</string>
-    <string name="asistencia_presente_cd">Presente</string>
-    <string name="asistencia_ausente_cd">Ausente</string>
-    <string name="asistencia_tarde_cd">Tarde</string>
-    <string name="asistencia_mes_resumen">Asistencia mes: %1$d%%</string>
-    <string name="no_new_notifications">No hay notificaciones nuevas</string>
-    <string-array name="weekdays_short_full">
-        <item>Lun</item><item>Mar</item><item>Mié</item><item>Jue</item><item>Vie</item><item>Sáb</item><item>Dom</item>
-    </string-array>
-    <string-array name="weekdays_short">
-        <item>Lun</item><item>Mar</item><item>Mié</item><item>Jue</item><item>Vie</item><item>Sáb</item><item>Dom</item>
-    </string-array>
+    <!-- Este archivo se ha vaciado para evitar conflictos de recursos duplicados. -->
+    <!-- Los strings se gestionarán desde strings.xml -->
 </resources>
-

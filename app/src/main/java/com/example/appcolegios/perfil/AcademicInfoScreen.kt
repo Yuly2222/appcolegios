@@ -1,3 +1,4 @@
+@file:Suppress("unused")
 package com.example.appcolegios.perfil
 
 import androidx.compose.foundation.layout.Column

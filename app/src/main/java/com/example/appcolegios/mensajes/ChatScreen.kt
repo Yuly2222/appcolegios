@@ -53,7 +53,8 @@ fun ChatScreen(
                 onTextChange = { text = it },
                 onSend = {
                     if (text.isNotBlank()) {
-                        chatViewModel.sendMessage(text, conversationId, "recipientId")
+                        // Usamos el conversationId como destino por defecto para chats 1 a 1
+                        chatViewModel.sendMessage(text, conversationId, conversationId)
                         text = ""
                     }
                 }

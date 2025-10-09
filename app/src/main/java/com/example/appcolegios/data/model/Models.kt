@@ -2,6 +2,7 @@
 
 package com.example.appcolegios.data.model
 
+import com.google.firebase.firestore.DocumentId
 import java.util.Date
 
 data class Student(
@@ -52,23 +53,23 @@ data class Homework(
 )
 
 data class Notification(
-    val id: String,
-    val titulo: String,
-    val cuerpo: String,
-    val remitente: String,
-    val fechaHora: Date,
+    @DocumentId val id: String = "",
+    val titulo: String = "",
+    val cuerpo: String = "",
+    val remitente: String = "",
+    val fechaHora: Date = Date(0),
     val avatarUrl: String? = null,
-    val leida: Boolean
+    val leida: Boolean = false
 )
 
 data class Message(
-    val id: String,
-    val fromId: String,
-    val toId: String,
-    val texto: String,
-    val fechaHora: Date,
-    val tipo: MessageType,
-    val estado: MessageStatus
+    val id: String = "",
+    val fromId: String = "",
+    val toId: String = "",
+    val texto: String = "",
+    val fechaHora: Date = Date(0),
+    val tipo: MessageType = MessageType.TEXTO,
+    val estado: MessageStatus = MessageStatus.ENVIADO
 )
 
 enum class MessageType {

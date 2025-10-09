@@ -84,7 +84,7 @@ fun ConversationItem(conversation: Conversation, onClick: () -> Unit) {
     ) {
         AsyncImage(
             model = conversation.otherUserAvatarUrl,
-            contentDescription = "Avatar de ${conversation.otherUserName}",
+            contentDescription = stringResource(R.string.avatar_de, conversation.otherUserName),
             modifier = Modifier
                 .size(56.dp)
                 .clip(CircleShape),

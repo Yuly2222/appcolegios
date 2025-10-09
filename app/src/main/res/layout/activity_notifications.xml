@@ -9,7 +9,7 @@
         android:id="@+id/titleNotifications"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Notificaciones"
+        android:text="@string/notifications"
         android:textSize="24sp"
         android:layout_gravity="center" />
 

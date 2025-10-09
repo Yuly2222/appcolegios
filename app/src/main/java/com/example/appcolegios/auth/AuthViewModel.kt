@@ -1,7 +1,9 @@
 package com.example.appcolegios.auth
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.appcolegios.data.UserPreferencesRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,13 +11,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-class AuthViewModel : ViewModel() {
+class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val userPrefs = UserPreferencesRepository(application)
 
     init {
         checkCurrentUser()
@@ -56,19 +59,14 @@ class AuthViewModel : ViewModel() {
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 val user = result.user
                 if (user != null) {
-                    // Guardar información adicional del usuario en Firestore
                     val userMap = hashMapOf(
                         "displayName" to displayName,
                         "email" to email,
-                        "role" to "student" // Rol por defecto
+                        "role" to "student"
                     )
                     firestore.collection("users").document(user.uid).set(userMap).await()
-                    // Considerar el registro como exitoso, pero dirigir a login
-                    // Para cumplir el requisito, no cambiaremos el estado a Authenticated aquí.
-                    // En su lugar, podríamos querer un estado diferente como "RegistrationSuccess"
-                    // o simplemente resetear a Idle y confiar en la navegación.
-                     _authState.value = AuthState.Idle // O un nuevo estado para indicar éxito de registro
-                     auth.signOut() // Cerrar sesión para forzar el login
+                    _authState.value = AuthState.Idle
+                    auth.signOut()
                 } else {
                     _authState.value = AuthState.Error("No se pudo crear el usuario.")
                 }
@@ -78,22 +76,48 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-     private fun fetchUserRole(userId: String) {
+    fun resetPassword(email: String, callback: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            if (email.isBlank()) {
+                callback(false, "Error: El correo no puede estar vacío.")
+                _authState.value = AuthState.Idle
+                return@launch
+            }
+            try {
+                auth.sendPasswordResetEmail(email).await()
+                callback(true, "Se ha enviado un enlace para restablecer la contraseña a tu correo.")
+                _authState.value = AuthState.Idle
+            } catch (e: Exception) {
+                callback(false, "Error: ${e.message ?: "No se pudo enviar el correo de restablecimiento."}")
+                _authState.value = AuthState.Idle
+            }
+        }
+    }
+
+    private fun fetchUserRole(userId: String) {
         viewModelScope.launch {
             try {
                 val document = firestore.collection("users").document(userId).get().await()
-                val role = document.getString("role") ?: "student" // Rol por defecto si no existe
+                val role = document.getString("role") ?: "student"
+                val displayName = document.getString("displayName") ?: ""
+
+                // Guardar datos unificados en preferencias
+                userPrefs.updateUserData(userId, role, displayName)
+
                 _authState.value = AuthState.Authenticated(userId, role)
             } catch (e: Exception) {
-                _authState.value = AuthState.Error("No se pudo obtener el rol del usuario.")
+                _authState.value = AuthState.Error("No se pudo obtener el rol del usuario: ${e.localizedMessage ?: ""}")
             }
         }
     }
 
     fun logout() {
-        auth.signOut()
-        _authState.value = AuthState.Idle
-        // Aquí también se debería limpiar el DataStore
+        viewModelScope.launch {
+            auth.signOut()
+            // Limpiar preferencias unificadas
+            userPrefs.updateUserData(null, null, null)
+            _authState.value = AuthState.Idle
+        }
     }
 }
-

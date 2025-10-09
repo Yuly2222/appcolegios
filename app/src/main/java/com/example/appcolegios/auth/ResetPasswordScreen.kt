@@ -1,77 +1,78 @@
 package com.example.appcolegios.auth
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
-import com.example.appcolegios.R
-import androidx.compose.ui.platform.LocalContext
 
 @Composable
-fun ResetPasswordScreen(navController: NavController, authViewModel: AuthViewModel = viewModel()) {
-    val ctx = LocalContext.current
+fun ResetPasswordScreen(
+    onPasswordResetSent: () -> Unit,
+    onNavigateToLogin: () -> Unit,
+    authViewModel: AuthViewModel = viewModel()
+) {
     var email by remember { mutableStateOf("") }
     val authState by authViewModel.authState.collectAsState()
-    var showError by remember { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
+    var resetStatus by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(authState) {
-        when (authState) {
-            is AuthState.Success -> {
-                val msg = ctx.getString(R.string.recovery_email_sent)
-                snackbarHostState.showSnackbar(msg)
-                navController.navigate("login") { popUpTo("reset") { inclusive = true } }
-                authViewModel.clearState()
-            }
-            is AuthState.Error -> showError = (authState as AuthState.Error).message
-            else -> Unit
-        }
-    }
-
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { paddingValues ->
+    Surface(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
-                .padding(paddingValues),
+                .padding(16.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text("Restablecer Contraseña", style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                "Ingresa tu correo electrónico y te enviaremos un enlace para restablecer tu contraseña.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+
             OutlinedTextField(
                 value = email,
-                onValueChange = { email = it; showError = null },
-                label = { Text(stringResource(R.string.email)) },
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                onValueChange = { email = it },
+                label = { Text("Correo Electrónico") },
+                modifier = Modifier.fillMaxWidth()
             )
-            Spacer(modifier = Modifier.height(16.dp))
-            Button(
-                onClick = { authViewModel.resetPassword(email) },
-                enabled = email.isNotBlank() && authState !is AuthState.Loading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                if (authState is AuthState.Loading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(stringResource(R.string.send_recovery_email))
-                }
-            }
-            if (showError != null) {
-                Spacer(Modifier.height(12.dp))
-                Text(showError ?: "", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
             Spacer(modifier = Modifier.height(24.dp))
-            TextButton(onClick = { navController.navigate("login") }) {
-                Text(stringResource(R.string.back_to_login))
+
+            if (authState is AuthState.Loading) {
+                CircularProgressIndicator()
+            }
+
+            resetStatus?.let {
+                Text(
+                    text = it,
+                    color = if (it.contains("Error")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
+
+            Button(
+                onClick = {
+                    authViewModel.resetPassword(email) { success, message ->
+                        resetStatus = message
+                        if (success) {
+                            onPasswordResetSent()
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = authState !is AuthState.Loading
+            ) {
+                Text("Enviar Enlace")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            TextButton(onClick = onNavigateToLogin) {
+                Text("Volver a Inicio de Sesión")
             }
         }
     }

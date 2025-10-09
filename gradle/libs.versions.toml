@@ -11,7 +11,7 @@ activity = "1.11.0"
 constraintlayout = "2.2.1"
 lifecycleRuntimeKtx = "2.8.4"
 activityCompose = "1.9.1"
-composeBom = "2024.09.00" # actualizado
+composeBom = "2024.09.00"
 navigationCompose = "2.7.7"
 lifecycleViewmodelKtx = "2.8.4"
 datastorePreferences = "1.1.1"
@@ -22,6 +22,8 @@ credentials = "1.5.0"
 credentialsPlayServicesAuth = "1.5.0"
 googleid = "1.1.1"
 kotlinxSerializationJson = "1.7.1"
+accompanist = "0.36.0"
+composePullRefresh = "1.7.3"
 
 
 [libraries]
@@ -45,6 +47,9 @@ androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-runtime = { group = "androidx.compose.runtime", name = "runtime" }
+androidx-material3-pullrefresh = { group = "androidx.compose.material3", name = "material3-pullrefresh" }
+accompanist-swiperefresh = { group = "com.google.accompanist", name = "accompanist-swiperefresh", version.ref = "accompanist" }
+androidx-material-pull-refresh = { group = "androidx.compose.material", name = "material-pull-refresh", version.ref = "composePullRefresh" }
 
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" }

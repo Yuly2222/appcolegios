@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.appcolegios"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -85,6 +85,9 @@ dependencies {
 
     // Serialization
     implementation(libs.kotlinx.serialization.json)
+
+    // Pull-to-refresh oficial de Compose (Material)
+    implementation(libs.androidx.material.pull.refresh)
 
 
     testImplementation(libs.junit)

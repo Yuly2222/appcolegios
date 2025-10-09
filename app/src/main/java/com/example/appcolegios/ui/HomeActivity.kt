@@ -5,14 +5,11 @@ import android.os.Bundle
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appcolegios.R
-import com.example.appcolegios.auth.LoginActivity
-import com.example.appcolegios.auth.RegisterActivity
-import com.example.appcolegios.auth.ResetPasswordActivity
 import com.example.appcolegios.notificaciones.NotificationsActivity
 import com.example.appcolegios.mensajes.ConversationsActivity
 import com.example.appcolegios.pagos.PaymentsActivity
 import com.example.appcolegios.transporte.TransportActivity
-import com.example.appcolegios.ui.*
+import com.example.appcolegios.perfil.AcademicInfoActivity
 
 class HomeActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {

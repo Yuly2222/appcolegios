@@ -2,10 +2,10 @@ package com.example.appcolegios.auth
 
 import android.content.Intent
 import android.os.Bundle
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
-import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appcolegios.R
@@ -31,7 +31,6 @@ class RegisterActivity : AppCompatActivity() {
         val roleSpinner: Spinner = findViewById(R.id.roleSpinner)
         val registerButton: Button = findViewById(R.id.registerButton)
 
-        // Spinner setup
         val roles = listOf("ESTUDIANTE", "PADRE", "DOCENTE")
         roleSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, roles)
 

@@ -27,6 +27,10 @@ class NotificationsViewModel : ViewModel() {
     val uiState: StateFlow<NotificationsUiState> = _uiState
 
     init {
+        refresh()
+    }
+
+    fun refresh() {
         loadNotifications()
     }
 
@@ -39,15 +43,41 @@ class NotificationsViewModel : ViewModel() {
             }
 
             try {
+                _uiState.value = _uiState.value.copy(isLoading = true, error = null)
                 val snapshot = db.collection("users").document(userId)
                     .collection("notifications")
                     .orderBy("fechaHora", Query.Direction.DESCENDING)
                     .get().await()
-                val notifications = snapshot.toObjects(Notification::class.java)
+
+                val notifications = snapshot.documents.mapNotNull { doc ->
+                    val n = doc.toObject(Notification::class.java)
+                    n?.copy(id = doc.id)
+                }
                 val groupedNotifications = groupNotificationsByDate(notifications)
                 _uiState.value = NotificationsUiState(notifications = groupedNotifications, isLoading = false)
             } catch (e: Exception) {
                 _uiState.value = NotificationsUiState(isLoading = false, error = e.message)
+            }
+        }
+    }
+
+    fun markAsRead(notificationId: String) {
+        // Actualización optimista local
+        val current = _uiState.value
+        val updatedMap = current.notifications.mapValues { (_, list) ->
+            list.map { if (it.id == notificationId) it.copy(leida = true) else it }
+        }
+        _uiState.value = current.copy(notifications = updatedMap)
+
+        // Persistir en Firestore en background
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid ?: return@launch
+            try {
+                db.collection("users").document(userId)
+                    .collection("notifications").document(notificationId)
+                    .update("leida", true).await()
+            } catch (_: Exception) {
+                // En caso de error remoto, podríamos revertir local, pero lo omitimos por simplicidad
             }
         }
     }
@@ -65,11 +95,9 @@ class NotificationsViewModel : ViewModel() {
             }
             buckets.getOrPut(key) { mutableListOf() }.add(n)
         }
-        // Mantener orden: Hoy, Ayer, luego fechas descendentes
         val todayList = buckets.remove("Hoy")
         val yesterdayList = buckets.remove("Ayer")
         val dated = buckets.entries.sortedByDescending { entry ->
-            // parse dd/MM/yyyy para ordenar
             val parts = entry.key.split('/')
             if (parts.size == 3) {
                 val d = parts[0].toIntOrNull() ?: 0

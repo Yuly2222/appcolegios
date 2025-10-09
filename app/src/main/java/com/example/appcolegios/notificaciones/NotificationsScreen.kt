@@ -1,27 +1,13 @@
 package com.example.appcolegios.notificaciones
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,46 +21,56 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
 import com.example.appcolegios.data.model.Notification
 import com.example.appcolegios.util.DateFormats
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewModel()) {
     val uiState by notificationsViewModel.uiState.collectAsState()
+    val scope: CoroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.notifications)) }) }
     ) { paddingValues ->
-        when {
-            uiState.isLoading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator() }
+        val refreshing = uiState.isLoading
+        val pullState = rememberPullRefreshState(refreshing = refreshing, onRefresh = { notificationsViewModel.refresh() })
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .pullRefresh(pullState)
+        ) {
+            when {
+                uiState.error != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: "")) }
+                }
+                uiState.notifications.isEmpty() && !uiState.isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) { Text(stringResource(R.string.no_new_notifications)) }
+                }
+                else -> {
+                    NotificationList(
+                        groupedNotifications = uiState.notifications,
+                        onNotificationClick = { notification ->
+                            scope.launch { notificationsViewModel.markAsRead(notification.id) }
+                        }
+                    )
+                }
             }
-            uiState.error != null -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: "")) }
-            }
-            uiState.notifications.isEmpty() -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) { Text(stringResource(R.string.no_new_notifications)) }
-            }
-            else -> {
-                NotificationList(
-                    groupedNotifications = uiState.notifications,
-                    modifier = Modifier.padding(paddingValues)
-                )
-            }
+
+            PullRefreshIndicator(
+                refreshing = refreshing,
+                state = pullState,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
@@ -82,6 +78,7 @@ fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewMod
 @Composable
 fun NotificationList(
     groupedNotifications: Map<String, List<Notification>>,
+    onNotificationClick: (Notification) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -90,8 +87,13 @@ fun NotificationList(
     ) {
         groupedNotifications.forEach { (dateHeader, notifications) ->
             item(key = "header_$dateHeader") {
+                val headerText = when (dateHeader) {
+                    "Hoy" -> stringResource(R.string.today)
+                    "Ayer" -> stringResource(R.string.yesterday)
+                    else -> dateHeader
+                }
                 Text(
-                    text = dateHeader,
+                    text = headerText,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
@@ -101,7 +103,7 @@ fun NotificationList(
                 items = notifications,
                 key = { it.id }
             ) { notification ->
-                NotificationItem(notification = notification, onClick = { /* marcar leída */ })
+                NotificationItem(notification = notification, onClick = { onNotificationClick(notification) })
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
         }
@@ -110,7 +112,7 @@ fun NotificationList(
 
 @Composable
 fun NotificationItem(notification: Notification, onClick: () -> Unit) {
-    val time = remember { DateFormats.formatTime(notification.fechaHora) }
+    val time = remember(notification.id, notification.fechaHora) { DateFormats.formatTime(notification.fechaHora) }
 
     Card(
         modifier = Modifier
@@ -123,7 +125,8 @@ fun NotificationItem(notification: Notification, onClick: () -> Unit) {
             Text(
                 text = notification.titulo,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = if (notification.leida) FontWeight.Normal else FontWeight.Bold
+                fontWeight = if (notification.leida) FontWeight.Normal else FontWeight.Bold,
+                color = if (notification.leida) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
