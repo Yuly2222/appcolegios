@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="white">#FFFFFFFF</color>
+    <color name="primary">#145DA0</color>
+
+    <string name="app_name">AppColegios</string>
+    <string name="email">Correo Electrónico</string>
+    <string name="password">Contraseña</string>
+    <string name="login">Iniciar Sesión</string>
+    <string name="register">¿No tienes una cuenta? Regístrate</string>
+    <string name="reset_password">¿Olvidaste tu contraseña?</string>
+    <string name="error_invalid_credentials">Credenciales inválidas</string>
+    <string name="account_created">Cuenta creada. Inicia sesión para continuar.</string>
+    <string name="name">Nombre Completo</string>
+    <string name="document">Documento</string>
+    <string name="phone">Teléfono</string>
+    <string name="select_role">Selecciona tu rol</string>
+    <string name="role_student">Estudiante</string>
+    <string name="role_parent">Padre</string>
+    <string name="role_teacher">Docente</string>
+    <string name="create_account">Crear Cuenta</string>
+    <string name="confirm_password">Confirmar Contraseña</string>
+    <string name="passwords_do_not_match">Las contraseñas no coinciden</string>
+    <string name="field_cannot_be_empty">El campo no puede estar vacío</string>
+    <string name="invalid_email">Correo electrónico inválido</string>
+    <string name="password_too_short">La contraseña debe tener al menos 6 caracteres</string>
+    <string name="send_recovery_email">Enviar correo de recuperación</string>
+    <string name="recovery_email_sent">Se ha enviado un correo de recuperación a tu dirección.</string>
+    <string name="error_sending_email">Error al enviar el correo. Inténtalo de nuevo.</string>
+    <string name="back_to_login">Volver a inicio de sesión</string>
+    <string name="network_error">Error de red</string>
+    <string name="network_error_description">No se pudo conectar. Por favor, revisa tu conexión a internet.</string>
+    <string name="retry">Reintentar</string>
+    <string name="logout">Cerrar Sesión</string>
+    <string name="logout_confirmation_title">Confirmar Cierre de Sesión</string>
+    <string name="logout_confirmation_message">¿Estás seguro de que quieres cerrar sesión?</string>
+    <string name="confirm">Confirmar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="home">Inicio</string>
+    <string name="notes">Notas</string>
+    <string name="attendance">Asistencia</string>
+    <string name="tasks">Tareas</string>
+    <string name="calendar">Calendario</string>
+    <string name="notifications">Notificaciones</string>
+    <string name="messages">Mensajes</string>
+    <string name="payments">Pagos</string>
+    <string name="profile">Perfil</string>
+    <string name="my_academic_information">Mi información académica</string>
+    <string name="payments_to_consider">Pagos a considerar</string>
+    <string name="back">Volver</string>
+    <string name="cerrar_sesion">Cerrar sesión</string>
+    <string name="empty_home">Sin accesos para mostrar.</string>
+    <string name="error_generic">Ha ocurrido un error.</string>
+    <string name="greeting">Hola, %1$s</string>
+    <string name="select_student">Selecciona estudiante</string>
+    <string name="select_group">Selecciona grupo</string>
+    <string name="unread_notifications">Notificaciones no leídas: %1$d</string>
+    <string name="unread_messages">Mensajes no leídos: %1$d</string>
+    <string name="no_student_data">Sin datos del estudiante</string>
+    <string name="error_cargando_datos">Error cargando datos</string>
+    <string name="foto_perfil_cd">Foto de perfil</string>
+    <string name="curso_label">Curso</string>
+    <string name="correo_institucional_label">Correo inst.</string>
+    <string name="numero_lista_label">Nº lista</string>
+    <string name="eps_label">EPS</string>
+    <string name="estado_matricula_label">Estado matrícula</string>
+    <string name="my_profile_read_only">Perfil de solo lectura</string>
+    <string name="register_attendance">Registrar asistencia</string>
+    <string name="how_did_you_get_here_today">¿Cómo llegaste hoy?</string>
+    <string name="transporte">Transporte</string>
+    <string name="rutas_no_aplican">Rutas no aplican</string>
+    <string name="write_message_placeholder">Escribe un mensaje…</string>
+    <string name="enviar_mensaje_cd">Enviar mensaje</string>
+    <string name="chat">Chat</string>
+    <!-- Nuevos strings para pantallas académicas y asistencia -->
+    <string name="error_label">Error</string>
+    <string name="no_tasks_for_today">No hay tareas para hoy</string>
+    <string name="promedio_global">Promedio global</string>
+    <string name="mes_anterior">Mes anterior</string>
+    <string name="mes_siguiente">Mes siguiente</string>
+    <string name="asistencia_presente_cd">Presente</string>
+    <string name="asistencia_ausente_cd">Ausente</string>
+    <string name="asistencia_tarde_cd">Tarde</string>
+    <string name="no_new_notifications">No hay notificaciones nuevas</string>
+    <string name="no_clases_dia">No hay clases este día</string>
+    <string name="aula_label">Aula</string>
+    <string name="asistencia_mes_resumen">Asistencia mes: %1$d%%</string>
+
+    <!-- Nuevos strings para pestañas en CalendarScreen -->
+    <string name="schedule">Horario</string>
+    <string name="events">Eventos</string>
+
+    <!-- Arrays requeridos -->
+    <string-array name="weekdays_short_full">
+        <item>Lun</item>
+        <item>Mar</item>
+        <item>Mié</item>
+        <item>Jue</item>
+        <item>Vie</item>
+        <item>Sáb</item>
+        <item>Dom</item>
+    </string-array>
+    <string-array name="weekdays_short">
+        <item>Lun</item>
+        <item>Mar</item>
+        <item>Mié</item>
+        <item>Jue</item>
+        <item>Vie</item>
+        <item>Sáb</item>
+        <item>Dom</item>
+    </string-array>
+
+    <!-- Descripción de avatar -->
+    <string name="avatar_de">Avatar de %1$s</string>
+</resources>

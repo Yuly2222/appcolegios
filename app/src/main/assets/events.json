@@ -1,0 +1,19 @@
+[
+  {
+    "id": "ev1",
+    "titulo": "Inicio de clases",
+    "fechaHora": "2025-01-15T07:00:00",
+    "categoria": "ACADEMICO",
+    "descripcion": "Ceremonia de apertura del año escolar",
+    "icon": "ic_event_school"
+  },
+  {
+    "id": "ev2",
+    "titulo": "Reunión de padres",
+    "fechaHora": "2025-02-10T17:00:00",
+    "categoria": "ADMINISTRATIVO",
+    "descripcion": "Reunión informativa con padres de familia",
+    "icon": "ic_event_meeting"
+  }
+]
+
