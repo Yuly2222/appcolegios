@@ -2,16 +2,15 @@ package com.example.appcolegios.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Paleta fija solicitada
-val AccentBlue = Color(0xFF56AEFF)   // #56aeff
-val PrimaryBlue = Color(0xFF145DA0)  // #145da0
-val DarkBlue = Color(0xFF051D40)     // #051d40
-val BrightBlue = Color(0xFF4BD1FB)   // #4bd1fb
-val LightCyan = Color(0xFFCFF4FF)    // #cff4ff
-
-// Derivados y roles de color
-val OnPrimaryDark = Color.White
-val OnPrimaryLight = Color.White
-val SurfaceLight = LightCyan
-val SurfaceDark = DarkBlue
-val ErrorRed = Color(0xFFB3261E)
+// Paleta oficial
+val Primary = Color(0xFF145DA0)       // #145da0
+val OnPrimary = Color(0xFFFFFFFF)     // #ffffff
+val Secondary = Color(0xFF56AEFF)     // #56aeff
+val OnSecondary = Color(0xFF051D40)   // #051d40
+val Tertiary = Color(0xFF4BD1FB)      // #4bd1fb
+val Background = Color(0xFFCFF4FF)    // #cff4ff
+val OnBackground = Color(0xFF051D40)  // #051d40
+val Surface = Color(0xFFFFFFFF)       // #ffffff
+val OnSurface = Color(0xFF051D40)     // #051d40
+val ErrorColor = Color(0xFFD9534F)    // #d9534f
+val SuccessColor = Color(0xFF3CB371)  // #3CB371

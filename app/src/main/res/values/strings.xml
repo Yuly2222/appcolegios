@@ -113,4 +113,5 @@
     <string name="today">Hoy</string>
     <string name="yesterday">Ayer</string>
     <string name="grupo_label">Grupo</string>
+    <string name="registrar_asistencia_transporte_desc">Registrar asistencia de llegada/salida sin rutas escolares</string>
 </resources>

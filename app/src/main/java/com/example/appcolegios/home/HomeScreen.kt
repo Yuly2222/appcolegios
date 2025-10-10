@@ -35,7 +35,10 @@ fun HomeScreen(navController: NavController) {
 
     val ui by vm.ui.collectAsState()
 
-    Surface(modifier = Modifier.fillMaxSize()) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
         when {
             ui.loading -> LoadingState()
             ui.error != null -> ErrorState(ui.error!!)
@@ -49,9 +52,12 @@ fun HomeScreen(navController: NavController) {
 private fun LoadingState() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            CircularProgressIndicator()
+            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(12.dp))
-            Text(stringResource(R.string.network_error).replace("red", "cargando"))
+            Text(
+                stringResource(R.string.network_error).replace("red", "cargando"),
+                color = MaterialTheme.colorScheme.onBackground
+            )
         }
     }
 }
@@ -59,7 +65,10 @@ private fun LoadingState() {
 @Composable
 private fun EmptyState() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(stringResource(R.string.empty_home))
+        Text(
+            stringResource(R.string.empty_home),
+            color = MaterialTheme.colorScheme.onBackground
+        )
     }
 }
 
@@ -69,7 +78,7 @@ private fun ErrorState(message: String) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(stringResource(R.string.error_generic), color = MaterialTheme.colorScheme.error)
             Spacer(Modifier.height(8.dp))
-            Text(message)
+            Text(message, color = MaterialTheme.colorScheme.onBackground)
         }
     }
 }
@@ -85,7 +94,8 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
         Text(
             text = if (!ui.name.isNullOrBlank()) stringResource(R.string.greeting, ui.name!!) else stringResource(R.string.home),
             style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground
         )
         Spacer(Modifier.height(8.dp))
 
@@ -93,11 +103,19 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AssistChip(
                 onClick = { onNavigate(AppRoutes.Notifications.route) },
-                label = { Text(stringResource(R.string.unread_notifications, ui.unreadNotifications)) }
+                label = { Text(stringResource(R.string.unread_notifications, ui.unreadNotifications)) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    labelColor = MaterialTheme.colorScheme.onSurface
+                )
             )
             AssistChip(
                 onClick = { onNavigate(AppRoutes.Messages.route) },
-                label = { Text(stringResource(R.string.unread_messages, ui.unreadMessages)) }
+                label = { Text(stringResource(R.string.unread_messages, ui.unreadMessages)) },
+                colors = AssistChipDefaults.assistChipColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    labelColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         }
 
@@ -105,7 +123,12 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
 
         // Banner de pagos a considerar (solo estudiantes/padres)
         if (ui.pagosEnConsideracion && ui.role != Role.DOCENTE) {
-            ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+            ElevatedCard(
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
+                ),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -115,9 +138,16 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
                     Text(
                         text = stringResource(R.string.payments_to_consider),
                         style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onBackground
                     )
-                    Button(onClick = { onNavigate(AppRoutes.Payments.route) }) {
+                    Button(
+                        onClick = { onNavigate(AppRoutes.Payments.route) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
                         Text(stringResource(R.string.payments))
                     }
                 }
@@ -146,7 +176,12 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
 
 @Composable
 private fun SectionHeader(text: String) {
-    Text(text, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onBackground
+    )
     Spacer(Modifier.height(8.dp))
 }
 

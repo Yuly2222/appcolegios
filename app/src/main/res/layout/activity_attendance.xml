@@ -9,7 +9,7 @@
         android:id="@+id/titleAttendance"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Asistencia"
+        android:text="@string/attendance"
         android:textSize="24sp"
         android:layout_gravity="center" />
 

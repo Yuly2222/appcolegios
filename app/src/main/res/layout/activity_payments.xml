@@ -13,7 +13,7 @@
             android:id="@+id/titlePayments"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Pagos"
+            android:text="@string/payments"
             android:textSize="24sp"
             android:layout_gravity="center" />
 

@@ -77,6 +77,7 @@ dependencies {
     // Jetpack
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel.ktx)
+    implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.livedata.ktx)
     implementation(libs.datastore.preferences)
 
@@ -85,9 +86,6 @@ dependencies {
 
     // Serialization
     implementation(libs.kotlinx.serialization.json)
-
-    // Pull-to-refresh oficial de Compose (Material)
-    implementation(libs.androidx.material.pull.refresh)
 
 
     testImplementation(libs.junit)

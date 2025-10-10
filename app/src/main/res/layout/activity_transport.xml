@@ -8,14 +8,13 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Transporte"
+        android:text="@string/transporte"
         android:textSize="24sp" />
 
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Registrar asistencia de llegada/salida sin rutas escolares"
+        android:text="@string/registrar_asistencia_transporte_desc"
         android:layout_marginTop="8dp" />
 
 </LinearLayout>
-

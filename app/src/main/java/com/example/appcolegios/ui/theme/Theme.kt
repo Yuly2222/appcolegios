@@ -13,29 +13,29 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = PrimaryBlue,
-    secondary = AccentBlue,
-    tertiary = BrightBlue,
-    background = DarkBlue,
-    surface = SurfaceDark,
-    onPrimary = OnPrimaryDark,
-    onSecondary = Color.White,
-    onBackground = LightCyan,
-    onSurface = LightCyan,
-    error = ErrorRed
+    primary = Primary,
+    onPrimary = OnPrimary,
+    secondary = Secondary,
+    onSecondary = OnSecondary,
+    tertiary = Tertiary,
+    background = Background,
+    onBackground = OnBackground,
+    surface = Surface,
+    onSurface = OnSurface,
+    error = ErrorColor
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryBlue,
-    secondary = AccentBlue,
-    tertiary = BrightBlue,
-    background = LightCyan,
-    surface = SurfaceLight,
-    onPrimary = OnPrimaryLight,
-    onSecondary = Color.White,
-    onBackground = DarkBlue,
-    onSurface = DarkBlue,
-    error = ErrorRed
+    primary = Primary,
+    onPrimary = OnPrimary,
+    secondary = Secondary,
+    onSecondary = OnSecondary,
+    tertiary = Tertiary,
+    background = Background,
+    onBackground = OnBackground,
+    surface = Surface,
+    onSurface = OnSurface,
+    error = ErrorColor
 )
 
 @Composable
@@ -58,6 +58,7 @@ fun AppColegiosTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = AppShapes,
         content = content
     )
 }
