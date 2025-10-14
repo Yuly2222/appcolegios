@@ -83,6 +83,9 @@
     <string name="no_clases_dia">No hay clases este día</string>
     <string name="aula_label">Aula</string>
     <string name="asistencia_mes_resumen">Asistencia mes: %1$d%%</string>
+    <string name="attendance_percentage">Asistencia: %1$d%%</string>
+    <string name="welcome_friendly">¡Qué bueno tenerte aquí!</string>
+    <string name="login_subtitle_quick">Inicia sesión rápido y seguro.</string>
 
     <!-- Nuevos strings para pestañas en CalendarScreen -->
     <string name="schedule">Horario</string>
@@ -114,4 +117,31 @@
     <string name="yesterday">Ayer</string>
     <string name="grupo_label">Grupo</string>
     <string name="registrar_asistencia_transporte_desc">Registrar asistencia de llegada/salida sin rutas escolares</string>
+    <string name="empty_notifications">No hay notificaciones</string>
+    <string name="new_message">Nuevo mensaje</string>
+    <string name="search_by_name_placeholder">Buscar por nombre…</string>
+
+    <!-- Nuevos strings para Dashboard -->
+    <string name="dashboard">Dashboard</string>
+    <string name="students">Estudiantes</string>
+    <string name="teachers">Docentes</string>
+    <string name="groups">Grupos</string>
+    <string name="total_users">Usuarios totales</string>
+
+    <!-- Nuevos strings usados en TransportActivity -->
+    <string name="last_attendance_today">Última asistencia: Hoy a las %1$s (%2$s)</string>
+    <string name="already_registered_today">Ya registrado hoy</string>
+    <string name="already_registered_today_snackbar">Ya registraste tu asistencia hoy</string>
+    <string name="select_transport_mode_prompt">Por favor selecciona un medio de transporte</string>
+    <string name="attendance_registered_success">Asistencia registrada exitosamente</string>
+    <string name="register_error_prefix">Error al registrar: %1$s</string>
+    <string name="check_attendance_error_prefix">Error al verificar asistencia: %1$s</string>
+
+    <!-- Nuevos strings para la pantalla de Ubicación del colegio y la clave de Google Maps -->
+    <string name="google_maps_key">REEMPLAZA_CON_TU_API_KEY</string>
+    <string name="ubicacion_colegio">Ubicación del colegio</string>
+    <string name="centrar_en_mi">Centrar en mí</string>
+    <string name="ir_al_colegio">Ir al colegio</string>
+    <string name="activa_ubicacion_para_ruta">Activa tu ubicación para ver la ruta</string>
+    <string name="ubicacion_no_disponible">No pudimos encontrar tu ubicación, pero puedes seguir viendo el colegio en el mapa</string>
 </resources>

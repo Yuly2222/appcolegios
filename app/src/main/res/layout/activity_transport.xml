@@ -1,20 +1,108 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:background="@color/background"
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/transporte"
-        android:textSize="24sp" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/registrar_asistencia_transporte_desc"
-        android:layout_marginTop="8dp" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/transporte"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="@color/on_background"
+            android:layout_marginBottom="16dp" />
 
-</LinearLayout>
+        <!-- Placeholder del mapa/colegio -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/surface"
+            app:cardElevation="4dp"
+            app:cardCornerRadius="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Ubicación del colegio"
+                android:textColor="@color/on_surface"
+                android:textSize="16sp" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Medio de transporte:"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/on_background"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Selector de medio de transporte -->
+        <RadioGroup
+            android:id="@+id/transportModeGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/radioWalking"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="A pie"
+                android:textColor="@color/on_background" />
+
+            <RadioButton
+                android:id="@+id/radioBicycle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Bicicleta"
+                android:textColor="@color/on_background" />
+
+            <RadioButton
+                android:id="@+id/radioPublic"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Transporte público"
+                android:textColor="@color/on_background" />
+
+            <RadioButton
+                android:id="@+id/radioFamily"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Familiar"
+                android:textColor="@color/on_background" />
+        </RadioGroup>
+
+        <!-- Botón Registrar asistencia -->
+        <com.example.appcolegios.ui.AnimatedMaterialButton
+            android:id="@+id/registerAttendanceButton"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:text="Registrar Asistencia"
+            android:textSize="16sp"
+            app:backgroundTint="@color/primary"
+            app:cornerRadius="12dp"
+            app:elevation="2dp" />
+
+        <TextView
+            android:id="@+id/lastAttendanceText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Última asistencia: --"
+            android:textColor="@color/on_surface_variant"
+            android:textSize="14sp" />
+
+    </LinearLayout>
+</ScrollView>

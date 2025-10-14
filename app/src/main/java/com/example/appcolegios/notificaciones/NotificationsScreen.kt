@@ -15,62 +15,46 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
 import com.example.appcolegios.data.model.Notification
 import com.example.appcolegios.util.DateFormats
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import com.example.appcolegios.demo.DemoData
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewModel()) {
     val uiState by notificationsViewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        stringResource(R.string.notifications),
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        if (uiState.isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                color = MaterialTheme.colorScheme.primary
             )
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            } else {
-                when {
-                    uiState.error != null -> {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: ""), color = MaterialTheme.colorScheme.error) }
-                    }
-                    uiState.notifications.isEmpty() -> {
+        } else {
+            when {
+                uiState.error != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: ""), color = MaterialTheme.colorScheme.error) }
+                }
+                else -> {
+                    val isDemo = DemoData.isDemoUser()
+                    val dataToShow = if (uiState.notifications.isEmpty() && isDemo) DemoData.demoNotifications() else uiState.notifications
+                    if (dataToShow.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) { Text(stringResource(R.string.no_new_notifications), color = MaterialTheme.colorScheme.onBackground) }
-                    }
-                    else -> {
+                    } else {
                         NotificationList(
-                            groupedNotifications = uiState.notifications,
+                            groupedNotifications = dataToShow,
                             onNotificationClick = { notification ->
                                 scope.launch { notificationsViewModel.markAsRead(notification.id) }
                             }

@@ -2,13 +2,13 @@ package com.example.appcolegios.auth
 
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appcolegios.R
 import com.google.firebase.auth.FirebaseAuth
+import com.google.android.material.button.MaterialButton
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -20,7 +20,7 @@ class LoginActivity : AppCompatActivity() {
 
         val emailInput: EditText = findViewById(R.id.emailInput)
         val passwordInput: EditText = findViewById(R.id.passwordInput)
-        val loginButton: Button = findViewById(R.id.loginButton)
+        val loginButton: MaterialButton = findViewById(R.id.loginButton)
         val registerLink: TextView = findViewById(R.id.registerLink)
         val resetLink: TextView = findViewById(R.id.resetLink)
 
@@ -32,7 +32,10 @@ class LoginActivity : AppCompatActivity() {
             } else {
                 auth.signInWithEmailAndPassword(email, password)
                     .addOnSuccessListener {
-                        startActivity(Intent(this, com.example.appcolegios.ui.HomeActivity::class.java))
+                        // Ir a MainActivity (Compose) con navegación moderna
+                        val intent = Intent(this, com.example.appcolegios.MainActivity::class.java)
+                        intent.putExtra("startDestination", "home")
+                        startActivity(intent)
                         finish()
                     }
                     .addOnFailureListener { e ->

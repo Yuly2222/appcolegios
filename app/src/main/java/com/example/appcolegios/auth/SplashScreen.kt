@@ -1,5 +1,7 @@
 package com.example.appcolegios.auth
 
+import android.app.Activity
+import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -56,7 +58,14 @@ fun SplashScreen(navController: NavController) {
                 } catch (_: Exception) { /* ignore, defaults later */ }
                 navController.navigate("home") { popUpTo("splash") { inclusive = true } }
             } else {
-                navController.navigate("login") { popUpTo("splash") { inclusive = true } }
+                // Mostrar únicamente el Login de XML
+                val activity = (LocalContext.current as? Activity)
+                activity?.let {
+                    it.startActivity(Intent(it, LoginActivity::class.java))
+                    it.finish()
+                } ?: run {
+                    navController.popBackStack(0, inclusive = true)
+                }
             }
         }
     }

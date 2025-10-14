@@ -23,8 +23,8 @@
         <item name="android:windowBackground">@color/background</item>
         <item name="android:windowLightStatusBar">false</item>
 
-        <!-- Formas redondeadas -->
-        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.App.SmallComponent</item>
+        <!-- Usar estilo personalizado para botones animados -->
+        <item name="materialButtonStyle">@style/Widget.App.AnimatedButton</item>
         <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.App.MediumComponent</item>
     </style>
 
@@ -37,5 +37,15 @@
     <style name="ShapeAppearance.App.MediumComponent" parent="ShapeAppearance.MaterialComponents.MediumComponent">
         <item name="cornerFamily">rounded</item>
         <item name="cornerSize">16dp</item>
+    </style>
+
+    <!-- Estilo para AnimatedMaterialButton -->
+    <style name="Widget.App.AnimatedButton" parent="Widget.MaterialComponents.Button">
+        <item name="android:insetLeft">16dp</item>
+        <item name="android:insetRight">16dp</item>
+        <item name="cornerRadius">16dp</item>
+        <item name="android:paddingTop">12dp</item>
+        <item name="android:paddingBottom">12dp</item>
+        <item name="android:stateListAnimator">?attr/selectableItemBackgroundBorderless</item>
     </style>
 </resources>

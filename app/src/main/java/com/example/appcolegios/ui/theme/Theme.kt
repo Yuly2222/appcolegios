@@ -1,56 +1,77 @@
 package com.example.appcolegios.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
-
-private val DarkColorScheme = darkColorScheme(
-    primary = Primary,
-    onPrimary = OnPrimary,
-    secondary = Secondary,
-    onSecondary = OnSecondary,
-    tertiary = Tertiary,
-    background = Background,
-    onBackground = OnBackground,
-    surface = Surface,
-    onSurface = OnSurface,
-    error = ErrorColor
-)
-
-private val LightColorScheme = lightColorScheme(
-    primary = Primary,
-    onPrimary = OnPrimary,
-    secondary = Secondary,
-    onSecondary = OnSecondary,
-    tertiary = Tertiary,
-    background = Background,
-    onBackground = OnBackground,
-    surface = Surface,
-    onSurface = OnSurface,
-    error = ErrorColor
-)
 
 @Composable
 fun AppColegiosTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val context = LocalContext.current
+
+    val light = lightColorScheme(
+        primary = Primary,
+        onPrimary = OnPrimary,
+        primaryContainer = PrimaryDeep,
+        onPrimaryContainer = OnPrimary,
+        secondary = Secondary,
+        onSecondary = OnSecondary,
+        tertiary = Tertiary,
+        background = Background,
+        onBackground = OnBackground,
+        surface = Surface,
+        onSurface = OnSurface,
+        surfaceVariant = OutlineColor,
+        onSurfaceVariant = OnSurfaceVariant,
+        error = ErrorColor,
+        outline = OutlineColor
+    )
+    val dark = darkColorScheme(
+        primary = Primary,
+        onPrimary = OnPrimary,
+        primaryContainer = PrimaryDeep,
+        onPrimaryContainer = OnPrimary,
+        secondary = Secondary,
+        onSecondary = OnSecondary,
+        tertiary = Tertiary,
+        background = Background,
+        onBackground = OnBackground,
+        surface = Surface,
+        onSurface = OnSurface,
+        surfaceVariant = OutlineColor,
+        onSurfaceVariant = OnSurfaceVariant,
+        error = ErrorColor,
+        outline = OutlineColor
+    )
+
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        darkTheme -> dark
+        else -> light
+    }
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
             @Suppress("DEPRECATION")
-            run { window.statusBarColor = colorScheme.primary.toArgb() }
-            // Íconos oscuros en status bar cuando el tema es claro
+            run { window.statusBarColor = PrimaryDeep.toArgb() }
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

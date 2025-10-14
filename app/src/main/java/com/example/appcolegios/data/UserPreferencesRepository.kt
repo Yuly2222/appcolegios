@@ -51,6 +51,13 @@ class UserPreferencesRepository(context: Context) {
             }
         }
     }
+
+    // Limpia todos los datos del usuario al cerrar sesión
+    suspend fun clearUserData() {
+        dataStore.edit { preferences ->
+            preferences.clear()
+        }
+    }
 }
 
 data class UserData(

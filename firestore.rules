@@ -1,0 +1,76 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Comprueba si el usuario autenticado es participante del chat
+    function isChatParticipant(chatId) {
+      return isSignedIn() &&
+        (get(/databases/$(database)/documents/chats/$(chatId)).data.participants
+          .hasAny([request.auth.uid]));
+    }
+
+    // Perfiles públicos mínimos para listados (name, avatarUrl, etc.)
+    match /publicProfiles/{uid} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    // USERS
+    match /users/{uid} {
+      // Lectura abierta a usuarios autenticados para mostrar listado de usuarios (name, avatarUrl)
+      allow read: if isSignedIn();
+      // Cada usuario gestiona su propio documento
+      allow create, update, delete: if isSignedIn() && request.auth.uid == uid;
+
+      // INBOX del usuario
+      match /inbox/{otherUid} {
+        // Solo el dueño del inbox puede leer
+        allow read: if isSignedIn() && request.auth.uid == uid;
+
+        // Permitir a: (1) el dueño actualizar su propio inbox (p. ej., reset unreadCount a 0)
+        // y (2) el otro participante actualizar lastMessage/lastTimestamp y subir unreadCount al enviar
+        allow create, update: if isSignedIn() && (
+          request.auth.uid == uid || request.auth.uid == otherUid
+        ) && (
+          request.resource.data.keys().hasOnly([
+            'otherUserName', 'otherUserAvatarUrl', 'lastMessage', 'lastTimestamp', 'unreadCount'
+          ])
+        ) && (
+          // Dueño: puede establecer unreadCount=0 (o no tocarlo)
+          (request.auth.uid == uid && (
+            !(request.resource.data.keys().hasAny(['unreadCount'])) || request.resource.data.unreadCount == 0
+          ))
+          ||
+          // Otro participante: puede incrementar (o crear) unreadCount y actualizar lastMessage/lastTimestamp
+          (request.auth.uid == otherUid && (
+            !(request.resource.data.keys().hasAny(['unreadCount'])) ||
+            request.resource.data.unreadCount >= (resource.data.unreadCount ?? 0)
+          ))
+        );
+
+        // Borrado del inbox: sólo el dueño
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // CHATS (doc meta y subcolección de mensajes)
+    match /chats/{chatId} {
+      // Documento meta del chat (participants, updatedAt)
+      allow read: if isChatParticipant(chatId);
+      allow create, update: if isChatParticipant(chatId);
+      allow delete: if false; // evita borrado de chats desde el cliente
+
+      // Subcolección de mensajes
+      match /messages/{msgId} {
+        allow read: if isChatParticipant(chatId);
+        // Solo participantes pueden crear mensajes y el fromId debe ser el usuario autenticado
+        allow create: if isChatParticipant(chatId) && request.resource.data.fromId == request.auth.uid;
+        // Evitar edición/borrado de mensajes desde cliente
+        allow update, delete: if false;
+      }
+    }
+  }
+}

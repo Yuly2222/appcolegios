@@ -27,7 +27,7 @@ class ProfileViewModel : ViewModel() {
             if (userId != null) {
                 try {
                     val document = db.collection("students").document(userId).get().await()
-                    val studentData = document.toObject(Student::class.java)
+                    val studentData = document.toObject(Student::class.java) ?: Student()
                     _student.value = Result.success(studentData)
                 } catch (e: Exception) {
                     _student.value = Result.failure(e)
@@ -36,4 +36,3 @@ class ProfileViewModel : ViewModel() {
         }
     }
 }
-

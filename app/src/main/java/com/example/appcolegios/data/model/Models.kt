@@ -6,15 +6,15 @@ import com.google.firebase.firestore.DocumentId
 import java.util.Date
 
 data class Student(
-    val id: String,
-    val nombre: String,
-    val curso: String,
-    val grupo: String,
-    val numeroLista: Int,
-    val correoInstitucional: String,
-    val eps: String,
-    val estadoMatricula: String,
-    val promedio: Double,
+    val id: String = "",
+    val nombre: String = "",
+    val curso: String = "",
+    val grupo: String = "",
+    val numeroLista: Int = 0,
+    val correoInstitucional: String = "",
+    val eps: String = "",
+    val estadoMatricula: String = "",
+    val promedio: Double = 0.0,
     val avatarUrl: String? = null
 )
 

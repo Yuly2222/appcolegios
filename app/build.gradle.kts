@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.example.appcolegios"
-     compileSdk = 36
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.appcolegios"
@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.firebase.firestore.ktx)
     implementation(libs.firebase.storage.ktx)
     implementation(libs.firebase.messaging.ktx)
+    implementation(libs.firebase.analytics.ktx)
 
     // Jetpack
     implementation(libs.navigation.compose)
@@ -87,9 +88,13 @@ dependencies {
     // Serialization
     implementation(libs.kotlinx.serialization.json)
 
+    // Lottie para animaciones en splash
+    implementation("com.airbnb.android:lottie:4.2.0")
 
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
+    // Google Maps & Location
+    implementation(libs.play.services.maps)
+    implementation(libs.play.services.location)
+
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)

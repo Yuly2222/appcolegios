@@ -12,10 +12,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
+import com.example.appcolegios.demo.DemoData
 
 @Composable
 fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel()) {
     val studentResult by profileViewModel.student.collectAsState(initial = null)
+    val isDemo = DemoData.isDemoUser()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -30,51 +32,17 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel()) {
         ) {
             when (val result = studentResult) {
                 null -> {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    if (isDemo) {
+                        StudentCard(student = DemoData.demoStudent())
+                    } else {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
                 }
                 else -> {
                     result.onSuccess { student ->
-                        if (student != null) {
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ),
-                                shape = MaterialTheme.shapes.medium,
-                                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(24.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = student.nombre,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Spacer(Modifier.height(16.dp))
-                                    HorizontalDivider()
-                                    Spacer(Modifier.height(16.dp))
-
-                                    ProfileInfoRow(
-                                        label = stringResource(R.string.curso_label),
-                                        value = student.curso
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-
-                                    ProfileInfoRow(
-                                        label = stringResource(R.string.select_group).replace("Selecciona ", ""),
-                                        value = student.grupo
-                                    )
-                                    Spacer(Modifier.height(12.dp))
-
-                                    ProfileInfoRow(
-                                        label = stringResource(R.string.promedio_global),
-                                        value = student.promedio.toString()
-                                    )
-                                }
-                            }
+                        val data = student ?: if (isDemo) DemoData.demoStudent() else null
+                        if (data != null) {
+                            StudentCard(student = data)
                         } else {
                             Text(
                                 text = stringResource(R.string.no_student_data),
@@ -82,21 +50,69 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel()) {
                             )
                         }
                     }.onFailure { e ->
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                            ),
-                            shape = MaterialTheme.shapes.small
-                        ) {
-                            Text(
-                                text = stringResource(R.string.error_label) + ": " + (e.message ?: ""),
-                                color = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.padding(16.dp)
-                            )
+                        if (isDemo) {
+                            StudentCard(student = DemoData.demoStudent())
+                        } else {
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                                ),
+                                shape = MaterialTheme.shapes.small
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.error_label) + ": " + (e.message ?: ""),
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(16.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = student.nombre,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(16.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(16.dp))
+
+            ProfileInfoRow(
+                label = stringResource(R.string.curso_label),
+                value = student.curso
+            )
+            Spacer(Modifier.height(12.dp))
+
+            ProfileInfoRow(
+                label = stringResource(R.string.select_group).replace("Selecciona ", ""),
+                value = student.grupo
+            )
+            Spacer(Modifier.height(12.dp))
+
+            ProfileInfoRow(
+                label = stringResource(R.string.promedio_global),
+                value = student.promedio.toString()
+            )
         }
     }
 }

@@ -1,67 +1,488 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.example.appcolegios.navigation
 
+import android.app.Activity
+import android.content.Intent
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.EventNote
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.appcolegios.R
 import com.example.appcolegios.academico.AttendanceScreen
 import com.example.appcolegios.academico.CalendarScreen
 import com.example.appcolegios.academico.NotesScreen
 import com.example.appcolegios.academico.TasksScreen
+import com.example.appcolegios.auth.LoginActivity
 import com.example.appcolegios.auth.LoginScreen
 import com.example.appcolegios.auth.RegisterScreen
 import com.example.appcolegios.auth.ResetPasswordScreen
 import com.example.appcolegios.auth.SplashScreen
+import com.example.appcolegios.dashboard.DashboardScreen
 import com.example.appcolegios.home.HomeScreen
+import com.example.appcolegios.mensajes.ChatScreen
 import com.example.appcolegios.mensajes.ConversationsScreen
+import com.example.appcolegios.mensajes.NewMessageScreen
 import com.example.appcolegios.notificaciones.NotificationsScreen
 import com.example.appcolegios.pagos.PaymentsScreen
 import com.example.appcolegios.perfil.ProfileScreen
 import com.example.appcolegios.transporte.TransportScreen
+import com.example.appcolegios.admin.AdminScreen
+import com.example.appcolegios.ubicacion.UbicacionScreen
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.appcolegios.data.UserPreferencesRepository
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    startDestination: String = AppRoutes.Splash.route,
+    unreadNotificationsCount: Int = 0,
+    unreadMessagesCount: Int = 0
+) {
     val navController = rememberNavController()
+    val backStackEntry = navController.currentBackStackEntryAsState().value
+    val currentDestination = backStackEntry?.destination
 
-    NavHost(navController = navController, startDestination = AppRoutes.Splash.route) {
-        composable(AppRoutes.Splash.route) { SplashScreen(navController) }
-        composable(AppRoutes.Login.route) {
-            LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(AppRoutes.Home.route) {
-                        // Limpia el backstack para que el usuario no pueda volver a Login
-                        popUpTo(AppRoutes.Login.route) { inclusive = true }
+    // Rutas donde se muestra la chrome (top bar, bottom bar, drawer)
+    val mainRoutes = setOf(
+        AppRoutes.Home.route,
+        AppRoutes.Messages.route,
+        AppRoutes.Notifications.route,
+        AppRoutes.Profile.route,
+        AppRoutes.Payments.route,
+        AppRoutes.Transport.route,
+        AppRoutes.Notes.route,
+        AppRoutes.Attendance.route,
+        AppRoutes.Tasks.route,
+        AppRoutes.Calendar.route,
+        AppRoutes.Dashboard.route
+    )
+
+    val showChrome = currentDestination?.route in mainRoutes
+
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+
+    val bottomItems = listOf(
+        BottomItem(stringResource(R.string.home), AppRoutes.Home.route, Icons.Filled.Home),
+        BottomItem(stringResource(R.string.messages), AppRoutes.Messages.route, Icons.AutoMirrored.Filled.Message),
+        BottomItem(stringResource(R.string.notifications), AppRoutes.Notifications.route, Icons.Filled.Notifications),
+        BottomItem(stringResource(R.string.profile), AppRoutes.Profile.route, Icons.Filled.Person)
+    )
+
+    // Badges en tiempo real desde Firestore
+    val badgesVm: BadgesViewModel = viewModel()
+    val badgesState = badgesVm.state.collectAsState().value
+
+    val notifCount = if (badgesState.unreadNotifications > 0) badgesState.unreadNotifications else unreadNotificationsCount
+    val msgCount = if (badgesState.unreadMessages > 0) badgesState.unreadMessages else unreadMessagesCount
+
+    val context = LocalContext.current
+    val userPrefs = UserPreferencesRepository(context)
+    val userData = userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null)).value
+    val isAdmin = (userData.role ?: "").equals("ADMIN", ignoreCase = true)
+
+    val content: @Composable () -> Unit = {
+        NavHost(navController = navController, startDestination = startDestination) {
+            composable(AppRoutes.Splash.route) { SplashScreen(navController) }
+            composable(AppRoutes.Login.route) {
+                // Redirigir al Login XML
+                val ctx = LocalContext.current
+                LaunchedEffect(Unit) {
+                    (ctx as? Activity)?.let {
+                        it.startActivity(Intent(it, LoginActivity::class.java))
+                        it.finish()
+                    } ?: run {
+                        ctx.startActivity(Intent(ctx, LoginActivity::class.java))
                     }
-                },
-                onNavigateToRegister = { navController.navigate(AppRoutes.Register.route) }
-            )
+                }
+                Box(Modifier) {}
+            }
+            composable(AppRoutes.Register.route) {
+                RegisterScreen(
+                    onRegisterSuccess = {
+                        navController.navigate(AppRoutes.Login.route) {
+                            popUpTo(AppRoutes.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToLogin = { navController.popBackStack() }
+                )
+            }
+            composable(AppRoutes.ResetPassword.route) {
+                ResetPasswordScreen(
+                    onPasswordResetSent = { navController.popBackStack() },
+                    onNavigateToLogin = { navController.popBackStack() }
+                )
+            }
+            composable(AppRoutes.Home.route) { HomeScreen(navController = navController) }
+            composable(AppRoutes.Profile.route) { ProfileScreen() }
+            composable(AppRoutes.Payments.route) { PaymentsScreen() }
+            composable(AppRoutes.Transport.route) { TransportScreen() }
+            composable(AppRoutes.Notes.route) { NotesScreen() }
+            composable(AppRoutes.Attendance.route) { AttendanceScreen() }
+            composable(AppRoutes.Tasks.route) { TasksScreen() }
+            composable(AppRoutes.Notifications.route) { NotificationsScreen() }
+            composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
+            composable(AppRoutes.Calendar.route) { CalendarScreen() }
+            composable(AppRoutes.Admin.route) { AdminScreen() }
+            composable(AppRoutes.Dashboard.route) { DashboardScreen() }
+            // Ruta Ubicación del colegio
+            composable(AppRoutes.Ubicacion.route) { UbicacionScreen() }
+            composable(
+                route = AppRoutes.Chat.route,
+                arguments = listOf(navArgument("otherUserId") { type = NavType.StringType })
+            ) { backStackEntry2 ->
+                val otherUserId = backStackEntry2.arguments?.getString("otherUserId") ?: ""
+                ChatScreen(navController = navController, otherUserId = otherUserId)
+            }
+            composable(AppRoutes.NewMessage.route) {
+                NewMessageScreen(
+                    onUserSelected = { userId ->
+                        navController.navigate("chat/$userId")
+                    },
+                    onBack = { navController.popBackStack() }
+                )
+            }
         }
-        composable(AppRoutes.Register.route) {
-            RegisterScreen(
-                onRegisterSuccess = {
-                    // Navega a Login y muestra un mensaje (implementación del mensaje más adelante)
-                    navController.navigate(AppRoutes.Login.route) {
-                        popUpTo(AppRoutes.Login.route) { inclusive = true }
+    }
+
+    if (!showChrome) {
+        // Rutas de auth/splash sin chrome
+        content()
+    } else {
+        // Drawer lateral funcional con opciones
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "Menú",
+                        modifier = Modifier.padding(16.dp),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    HorizontalDivider()
+
+                    // Opción Home
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                        label = { Text(stringResource(R.string.home)) },
+                        selected = currentDestination?.route == AppRoutes.Home.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Home.route) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Perfil
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                        label = { Text(stringResource(R.string.profile)) },
+                        selected = currentDestination?.route == AppRoutes.Profile.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Profile.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Pagos
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.CreditCard, contentDescription = null) },
+                        label = { Text(stringResource(R.string.payments)) },
+                        selected = currentDestination?.route == AppRoutes.Payments.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Payments.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Transporte
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.DirectionsBus, contentDescription = null) },
+                        label = { Text(stringResource(R.string.transporte)) },
+                        selected = currentDestination?.route == AppRoutes.Transport.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Transport.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Notas
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.School, contentDescription = null) },
+                        label = { Text(stringResource(R.string.notes)) },
+                        selected = currentDestination?.route == AppRoutes.Notes.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Notes.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Asistencia
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.EventNote, contentDescription = null) },
+                        label = { Text(stringResource(R.string.attendance)) },
+                        selected = currentDestination?.route == AppRoutes.Attendance.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Attendance.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Tareas
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null) },
+                        label = { Text(stringResource(R.string.tasks)) },
+                        selected = currentDestination?.route == AppRoutes.Tasks.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Tasks.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Calendario
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.CalendarToday, contentDescription = null) },
+                        label = { Text(stringResource(R.string.calendar)) },
+                        selected = currentDestination?.route == AppRoutes.Calendar.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Calendar.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    // Opción Dashboard (solo admin)
+                    if (isAdmin) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.Dashboard, contentDescription = null) },
+                            label = { Text(stringResource(R.string.dashboard)) },
+                            selected = currentDestination?.route == AppRoutes.Dashboard.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Dashboard.route)
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
                     }
+
+                    // Insertar acceso a Ubicación del colegio antes del divider final
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.School, contentDescription = null) },
+                        label = { Text(stringResource(R.string.ubicacion_colegio)) },
+                        selected = currentDestination?.route == AppRoutes.Ubicacion.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Ubicacion.route)
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                    // Opción Cerrar Sesión
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
+                        label = { Text("Cerrar Sesión") },
+                        selected = false,
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                // Cerrar sesión en Firebase
+                                FirebaseAuth.getInstance().signOut()
+                                // Limpiar preferencias del usuario
+                                scope.launch {
+                                    userPrefs.clearUserData()
+                                }
+                                // Navegar al login
+                                navController.navigate(AppRoutes.Login.route) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
+                        },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedTextColor = MaterialTheme.colorScheme.error,
+                            unselectedIconColor = MaterialTheme.colorScheme.error
+                        ),
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                }
+            }
+        ) {
+            Scaffold(
+                topBar = {
+                    var overflowOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                    CenterAlignedTopAppBar(
+                        title = {
+                            Text(
+                                when (currentDestination?.route) {
+                                    AppRoutes.Home.route -> stringResource(R.string.home)
+                                    AppRoutes.Messages.route -> stringResource(R.string.messages)
+                                    AppRoutes.Notifications.route -> stringResource(R.string.notifications)
+                                    AppRoutes.Profile.route -> stringResource(R.string.profile)
+                                    AppRoutes.Payments.route -> stringResource(R.string.payments)
+                                    AppRoutes.Transport.route -> stringResource(R.string.transporte)
+                                    AppRoutes.Notes.route -> stringResource(R.string.notes)
+                                    AppRoutes.Attendance.route -> stringResource(R.string.attendance)
+                                    AppRoutes.Tasks.route -> stringResource(R.string.tasks)
+                                    AppRoutes.Calendar.route -> stringResource(R.string.calendar)
+                                    AppRoutes.Dashboard.route -> stringResource(R.string.dashboard)
+                                    else -> stringResource(R.string.app_name)
+                                }
+                            )
+                        },
+                        navigationIcon = {
+                            // Ícono de menú que abre el drawer
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Filled.Menu, contentDescription = "Menú")
+                            }
+                        },
+                        actions = {
+                            // Home
+                            IconButton(onClick = {
+                                navController.navigate(AppRoutes.Home.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                    popUpTo(AppRoutes.Home.route) { inclusive = false; saveState = true }
+                                }
+                            }) {
+                                Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.home))
+                            }
+                            // Notificaciones con badge
+                            IconButton(onClick = { navController.navigate(AppRoutes.Notifications.route) }) {
+                                BadgedBox(badge = {
+                                    if (notifCount > 0) {
+                                        Badge { Text(if (notifCount > 99) "99+" else notifCount.toString()) }
+                                    }
+                                }) {
+                                    Icon(Icons.Filled.Notifications, contentDescription = "Notificaciones")
+                                }
+                            }
+                            // Overflow con accesos: Perfil, Pagos, Calendario y Dashboard (admin)
+                            IconButton(onClick = { overflowOpen = true }) {
+                                Icon(Icons.Filled.MoreVert, contentDescription = "Más opciones")
+                            }
+                            DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                                DropdownMenuItem(text = { Text(stringResource(R.string.profile)) }, onClick = {
+                                    overflowOpen = false
+                                    navController.navigate(AppRoutes.Profile.route)
+                                })
+                                DropdownMenuItem(text = { Text(stringResource(R.string.payments)) }, onClick = {
+                                    overflowOpen = false
+                                    navController.navigate(AppRoutes.Payments.route)
+                                })
+                                DropdownMenuItem(text = { Text(stringResource(R.string.calendar)) }, onClick = {
+                                    overflowOpen = false
+                                    navController.navigate(AppRoutes.Calendar.route)
+                                })
+                                if (isAdmin) {
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.dashboard)) }, onClick = {
+                                        overflowOpen = false
+                                        navController.navigate(AppRoutes.Dashboard.route)
+                                    })
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    )
                 },
-                onNavigateToLogin = { navController.popBackStack() }
-            )
+                bottomBar = {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                        bottomItems.forEach { item ->
+                            val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+                            val scale by animateFloatAsState(targetValue = if (selected) 1f else 0.95f, label = "nav_icon_scale")
+                            NavigationBarItem(
+                                selected = selected,
+                                onClick = {
+                                    navController.navigate(item.route) {
+                                        launchSingleTop = true
+                                        restoreState = true
+                                        popUpTo(AppRoutes.Home.route) { saveState = true }
+                                    }
+                                },
+                                icon = {
+                                    val iconModifier = Modifier.graphicsLayer(scaleX = scale, scaleY = scale)
+                                    when (item.route) {
+                                        AppRoutes.Notifications.route -> {
+                                            BadgedBox(badge = {
+                                                if (notifCount > 0) {
+                                                    Badge { Text(if (notifCount > 99) "99+" else notifCount.toString()) }
+                                                }
+                                            }) { Icon(item.icon, contentDescription = item.label, modifier = iconModifier) }
+                                        }
+                                        AppRoutes.Messages.route -> {
+                                            BadgedBox(badge = {
+                                                if (msgCount > 0) {
+                                                    Badge { Text(if (msgCount > 99) "99+" else msgCount.toString()) }
+                                                }
+                                            }) { Icon(item.icon, contentDescription = item.label, modifier = iconModifier) }
+                                        }
+                                        else -> Icon(item.icon, contentDescription = item.label, modifier = iconModifier)
+                                    }
+                                },
+                                label = { Text(item.label) }
+                            )
+                        }
+                    }
+                }
+            ) { innerPadding ->
+                Box(Modifier.padding(innerPadding)) {
+                    content()
+                }
+            }
         }
-        composable(AppRoutes.ResetPassword.route) {
-            ResetPasswordScreen(
-                onPasswordResetSent = { navController.popBackStack() },
-                onNavigateToLogin = { navController.popBackStack() }
-            )
-        }
-        composable(AppRoutes.Home.route) { HomeScreen(navController = navController) }
-        composable(AppRoutes.Profile.route) { ProfileScreen() }
-        composable(AppRoutes.Payments.route) { PaymentsScreen() }
-        composable(AppRoutes.Transport.route) { TransportScreen() }
-        composable(AppRoutes.Notes.route) { NotesScreen() }
-        composable(AppRoutes.Attendance.route) { AttendanceScreen() }
-        composable(AppRoutes.Tasks.route) { TasksScreen() }
-        composable(AppRoutes.Notifications.route) { NotificationsScreen() }
-        composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
-        composable(AppRoutes.Calendar.route) { CalendarScreen() }
     }
 }
+
+private data class BottomItem(val label: String, val route: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)

@@ -20,30 +20,33 @@ import com.example.appcolegios.R
 import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.data.model.Role
 import com.example.appcolegios.navigation.AppRoutes
+import com.example.appcolegios.demo.DemoData
+import com.example.appcolegios.teacher.TeacherHomeScreen
+import com.example.appcolegios.parent.ParentHomeScreen
 
 @Composable
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
-
     val vm: HomeViewModel = viewModel(factory = object : ViewModelProvider.Factory {
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             @Suppress("UNCHECKED_CAST")
             return HomeViewModel(userPrefs) as T
         }
     })
-
     val ui by vm.ui.collectAsState()
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        when {
-            ui.loading -> LoadingState()
-            ui.error != null -> ErrorState(ui.error!!)
-            ui.role == null && (ui.name?.isBlank() != false) -> EmptyState()
-            else -> HomeContent(ui = ui, onNavigate = { route -> navController.navigate(route) })
+    when {
+        ui.loading -> LoadingState()
+        ui.error != null -> ErrorState(ui.error!!)
+        ui.role == null && (ui.name?.isBlank() != false) -> EmptyState()
+        else -> {
+            // Mostrar pantalla específica según el rol
+            when (ui.role) {
+                Role.DOCENTE -> TeacherHomeScreen()
+                Role.PADRE -> ParentHomeScreen()
+                else -> HomeContent(ui = ui, onNavigate = { route -> navController.navigate(route) })
+            }
         }
     }
 }
@@ -85,6 +88,11 @@ private fun ErrorState(message: String) {
 
 @Composable
 private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
+    val isDemo = DemoData.isDemoUser()
+    val unreadNotifications = if (isDemo) DemoData.unreadNotificationsCount() else ui.unreadNotifications
+    val unreadMessages = if (isDemo) DemoData.unreadMessagesCount() else ui.unreadMessages
+    val pagosDemo = if (isDemo) true else ui.pagosEnConsideracion
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -92,7 +100,7 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
     ) {
         // Saludo
         Text(
-            text = if (!ui.name.isNullOrBlank()) stringResource(R.string.greeting, ui.name!!) else stringResource(R.string.home),
+            text = if (!ui.name.isNullOrBlank()) stringResource(R.string.greeting, ui.name) else stringResource(R.string.home),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground
@@ -103,7 +111,7 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AssistChip(
                 onClick = { onNavigate(AppRoutes.Notifications.route) },
-                label = { Text(stringResource(R.string.unread_notifications, ui.unreadNotifications)) },
+                label = { Text(stringResource(R.string.unread_notifications, unreadNotifications)) },
                 colors = AssistChipDefaults.assistChipColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     labelColor = MaterialTheme.colorScheme.onSurface
@@ -111,7 +119,7 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
             )
             AssistChip(
                 onClick = { onNavigate(AppRoutes.Messages.route) },
-                label = { Text(stringResource(R.string.unread_messages, ui.unreadMessages)) },
+                label = { Text(stringResource(R.string.unread_messages, unreadMessages)) },
                 colors = AssistChipDefaults.assistChipColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     labelColor = MaterialTheme.colorScheme.onSurface
@@ -122,7 +130,7 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
         Spacer(Modifier.height(12.dp))
 
         // Banner de pagos a considerar (solo estudiantes/padres)
-        if (ui.pagosEnConsideracion && ui.role != Role.DOCENTE) {
+        if (pagosDemo && ui.role != Role.DOCENTE && ui.role != Role.ADMIN) {
             ElevatedCard(
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f)
@@ -156,21 +164,92 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
         }
 
         // Secciones por rol
-        SectionHeader(stringResource(R.string.my_academic_information))
-        AcademicSection(onNavigate)
+        when (ui.role) {
+            Role.DOCENTE -> {
+                SectionHeader(stringResource(R.string.my_academic_information))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Attendance.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.register_attendance))
+                        }
+                    }
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Tasks.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.tasks))
+                        }
+                    }
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Notes.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text(stringResource(R.string.notes))
+                        }
+                    }
+                }
+            }
+            Role.PADRE -> {
+                SectionHeader(stringResource(R.string.my_academic_information))
+                // Enfocar accesos de tutoría
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Payments.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.payments)) }
+                    }
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Messages.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.messages)) }
+                    }
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Calendar.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.calendar)) }
+                    }
+                }
+            }
+            Role.ADMIN -> {
+                SectionHeader("Administración")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Admin.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Admin") }
+                    }
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Dashboard.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.dashboard)) }
+                    }
+                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Profile.route) }) {
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.profile)) }
+                    }
+                }
+            }
+            else -> {
+                // ESTUDIANTE u otros
+                SectionHeader(stringResource(R.string.my_academic_information))
+                AcademicSection(onNavigate)
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
 
-        // Accesos generales
-        val tiles = buildList {
-            add(QuickTile(stringResource(R.string.transporte)) { onNavigate(AppRoutes.Transport.route) })
-            add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
-            if (ui.role != Role.DOCENTE) {
-                add(QuickTile(stringResource(R.string.payments)) { onNavigate(AppRoutes.Payments.route) })
+        // Accesos generales por rol
+        val tiles: List<QuickTile> = when (ui.role) {
+            Role.DOCENTE -> buildList {
+                add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
+                add(QuickTile(stringResource(R.string.messages)) { onNavigate(AppRoutes.Messages.route) })
+                add(QuickTile(stringResource(R.string.profile)) { onNavigate(AppRoutes.Profile.route) })
             }
-            add(QuickTile(stringResource(R.string.profile)) { onNavigate(AppRoutes.Profile.route) })
+            Role.PADRE -> buildList {
+                add(QuickTile(stringResource(R.string.transporte)) { onNavigate(AppRoutes.Transport.route) })
+                add(QuickTile(stringResource(R.string.notifications)) { onNavigate(AppRoutes.Notifications.route) })
+                add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
+                add(QuickTile(stringResource(R.string.profile)) { onNavigate(AppRoutes.Profile.route) })
+            }
+            Role.ADMIN -> buildList {
+                add(QuickTile(stringResource(R.string.notifications)) { onNavigate(AppRoutes.Notifications.route) })
+                add(QuickTile(stringResource(R.string.messages)) { onNavigate(AppRoutes.Messages.route) })
+                add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
+                add(QuickTile(stringResource(R.string.dashboard)) { onNavigate(AppRoutes.Dashboard.route) })
+            }
+            else -> buildList {
+                add(QuickTile(stringResource(R.string.transporte)) { onNavigate(AppRoutes.Transport.route) })
+                add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
+                add(QuickTile(stringResource(R.string.payments)) { onNavigate(AppRoutes.Payments.route) })
+                add(QuickTile(stringResource(R.string.profile)) { onNavigate(AppRoutes.Profile.route) })
+            }
         }
-        QuickGrid(tiles)
+        if (tiles.isNotEmpty()) QuickGrid(tiles)
     }
 }
 
@@ -197,7 +276,9 @@ private fun QuickGrid(items: List<QuickTile>) {
     ) {
         items(items) { tile ->
             ElevatedCard(onClick = tile.onClick) {
-                Box(Modifier.height(96.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Box(Modifier
+                    .height(96.dp)
+                    .fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(tile.title)
                 }
             }
@@ -209,17 +290,23 @@ private fun QuickGrid(items: List<QuickTile>) {
 private fun AcademicSection(onNavigate: (String) -> Unit) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Notes.route) }) {
-            Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(Modifier
+                .height(84.dp)
+                .fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.notes))
             }
         }
         ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Attendance.route) }) {
-            Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(Modifier
+                .height(84.dp)
+                .fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.attendance))
             }
         }
         ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Tasks.route) }) {
-            Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(Modifier
+                .height(84.dp)
+                .fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Text(stringResource(R.string.tasks))
             }
         }

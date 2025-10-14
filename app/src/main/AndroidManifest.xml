@@ -3,6 +3,12 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Permisos de red necesarios para Firebase/Firestore y cargas de datos -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Permisos de ubicación, solo solicitados bajo demanda en runtime -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:allowBackup="true"
@@ -13,6 +19,11 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.Appcolegios">
+
+        <!-- API key de Google Maps (define @string/google_maps_key) -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="@string/google_maps_key" />
 
         <!-- SplashActivity como lanzador (UI basada en XML/Activities) -->
         <activity
@@ -25,17 +36,25 @@
             </intent-filter>
         </activity>
 
-        <!-- MainActivity (no lanzadora, mantiene compatibilidad si se necesitara) -->
+        <!-- MainActivity (Compose) como host de navegación -->
         <activity
             android:name=".MainActivity"
-            android:exported="false" />
+            android:exported="true">
+            <!-- Deep link a notificaciones -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="appcolegios" android:host="notifications" />
+            </intent-filter>
+        </activity>
 
         <!-- Auth activities -->
         <activity android:name=".auth.LoginActivity" android:exported="false" />
         <activity android:name=".auth.RegisterActivity" android:exported="false" />
         <activity android:name=".auth.ResetPasswordActivity" android:exported="false" />
 
-        <!-- Home y otras -->
+        <!-- Home y otras (legacy XML) -->
         <activity android:name=".ui.HomeActivity" android:exported="false" />
         <activity android:name=".ui.ProfileActivity" android:exported="false" />
         <activity android:name=".ui.GradesActivity" android:exported="false" />
@@ -44,14 +63,7 @@
         <activity android:name=".ui.CalendarActivity" android:exported="false" />
         <activity android:name=".ui.ScheduleActivity" android:exported="false" />
         <activity android:name=".ui.EventsActivity" android:exported="false" />
-        <activity android:name=".notificaciones.NotificationsActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="appcolegios" android:host="notifications" />
-            </intent-filter>
-        </activity>
+        <activity android:name=".notificaciones.NotificationsActivity" android:exported="false" />
         <activity android:name=".mensajes.ConversationsActivity" android:exported="false" />
         <activity android:name=".mensajes.ChatActivity" android:exported="false" />
         <activity android:name=".pagos.PaymentsActivity" android:exported="false" />

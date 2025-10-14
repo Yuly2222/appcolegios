@@ -10,7 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
+import com.example.appcolegios.MainActivity
 import com.example.appcolegios.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.messaging.FirebaseMessaging
@@ -33,10 +33,10 @@ class AppFirebaseMessagingService : FirebaseMessagingService() {
         val title = message.notification?.title ?: getString(R.string.notifications)
         val body = message.notification?.body ?: message.data["body"] ?: ""
 
-        // Deep link a la pantalla de notificaciones
-        val intent = Intent(this, NotificationsActivity::class.java).apply {
+        // Abrir MainActivity con startDestination=notifications para UI Compose persistente
+        val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            data = "appcolegios://notifications".toUri()
+            putExtra("startDestination", "notifications")
         }
         val pendingIntent = PendingIntent.getActivity(
             this,

@@ -1,23 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@color/background"
+    android:padding="16dp">
 
-    <LinearLayout
-        android:orientation="vertical"
-        android:padding="16dp"
+    <!-- Imagen stiker.png centrada -->
+    <ImageView
+        android:id="@+id/stikerImage"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="centerInside"
+        android:src="@drawable/stiker"
+        android:contentDescription="Información de Pagos"
+        android:padding="24dp" />
 
-        <TextView
-            android:id="@+id/titlePayments"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/payments"
-            android:textSize="24sp"
-            android:layout_gravity="center" />
+    <TextView
+        android:id="@+id/titlePayments"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/payments"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="@color/on_background"
+        android:layout_marginTop="24dp"
+        android:layout_gravity="center" />
 
-        <!-- Aquí puedes añadir un ListView o banner de pagos -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Información de pagos"
+        android:textSize="16sp"
+        android:textColor="@color/on_background"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="32dp"
+        android:layout_gravity="center" />
 
-    </LinearLayout>
-</ScrollView>
+</LinearLayout>

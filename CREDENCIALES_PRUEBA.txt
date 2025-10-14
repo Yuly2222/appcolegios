@@ -1,0 +1,46 @@
+# CONTRASEÑAS DE USUARIOS DE PRUEBA
+
+IMPORTANTE: Debes crear estas cuentas manualmente en Firebase Authentication Console.
+
+## Usuarios y Contraseñas Sugeridas:
+
+1. **Estudiante**
+   - Email: jcamilodiaz7@gmail.com
+   - Contraseña sugerida: test123456
+
+2. **Profesor**
+   - Email: hermanitos605@gmail.com
+   - Contraseña sugerida: test123456
+
+3. **Administrador**
+   - Email: jcamilodiaz777@gmail.com
+   - Contraseña sugerida: test123456
+
+4. **Padre**
+   - Email: hermanitos604@gmail.com
+   - Contraseña sugerida: test123456
+
+## Cómo crear las cuentas en Firebase:
+
+1. Ve a Firebase Console: https://console.firebase.google.com/
+2. Selecciona tu proyecto: appcolegios-a0c84
+3. Ve a Authentication > Users
+4. Click en "Add user"
+5. Ingresa el email y la contraseña sugerida
+6. Repite para cada usuario
+
+## PROBLEMA CRÍTICO DETECTADO:
+
+El error que ves indica que **Firestore NO está habilitado en tu proyecto Firebase**.
+
+```
+Cloud Firestore API has not been used in project appcolegios-a0c84 before or it is disabled.
+```
+
+### Solución:
+
+1. Ve a: https://console.developers.google.com/apis/api/firestore.googleapis.com/overview?project=appcolegios-a0c84
+2. Click en "ENABLE" (Habilitar)
+3. Espera unos minutos para que se propague
+4. Verifica que las reglas de Firestore permitan lectura/escritura (en modo desarrollo)
+

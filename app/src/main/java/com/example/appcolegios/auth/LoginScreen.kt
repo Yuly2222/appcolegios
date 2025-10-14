@@ -1,12 +1,16 @@
 package com.example.appcolegios.auth
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -16,11 +20,19 @@ import com.example.appcolegios.R
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToRegister: () -> Unit,
+    onNavigateToReset: () -> Unit,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    var email by remember { mutableStateOf("") }
+    // Precargar datos del profesor para pruebas
+    var email by remember { mutableStateOf("hermanitos605@gmail.com") }
     var password by remember { mutableStateOf("") }
     val authState by authViewModel.authState.collectAsState()
+
+    val emailValid = remember(email) {
+        android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
+    }
+    val passwordValid = remember(password) { password.length >= 6 }
+    val formValid = emailValid && passwordValid
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -43,11 +55,17 @@ fun LoginScreen(
             )
 
             Text(
-                "Inicio de Sesión",
-                style = MaterialTheme.typography.headlineMedium,
+                stringResource(R.string.welcome_friendly),
+                style = MaterialTheme.typography.headlineSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.login_subtitle_quick),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(24.dp))
 
             // Card blanco para contener los campos
             Card(
@@ -56,7 +74,7 @@ fun LoginScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
                 shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp)
@@ -64,8 +82,14 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = email,
                         onValueChange = { email = it },
-                        label = { Text("Correo Electrónico") },
+                        label = { Text(stringResource(R.string.email)) },
                         modifier = Modifier.fillMaxWidth(),
+                        isError = email.isNotBlank() && !emailValid,
+                        supportingText = {
+                            if (email.isNotBlank() && !emailValid) {
+                                Text(stringResource(R.string.invalid_email))
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
                             focusedLabelColor = MaterialTheme.colorScheme.primary,
@@ -77,9 +101,15 @@ fun LoginScreen(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Contraseña") },
+                        label = { Text(stringResource(R.string.password)) },
                         visualTransformation = PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
+                        isError = password.isNotBlank() && !passwordValid,
+                        supportingText = {
+                            if (password.isNotBlank() && !passwordValid) {
+                                Text(stringResource(R.string.password_too_short))
+                            }
+                        },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = MaterialTheme.colorScheme.primary,
                             focusedLabelColor = MaterialTheme.colorScheme.primary,
@@ -103,7 +133,7 @@ fun LoginScreen(
                             .fillMaxWidth()
                             .padding(bottom = 16.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)
                         ),
                         shape = MaterialTheme.shapes.small
                     ) {
@@ -114,40 +144,60 @@ fun LoginScreen(
                         )
                     }
                 }
-                is AuthState.Authenticated -> {
-                    // Navegación manejada por el efecto lanzado
-                }
+                is AuthState.Authenticated -> { /* Navega abajo */ }
                 else -> {}
             }
 
-            // Botón principal - azul oscuro
+            // Botón principal con microanimación de presión
+            val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+            val pressed by interaction.collectIsPressedAsState()
+            val scale by animateFloatAsState(if (pressed) 0.98f else 1f, label = "login_btn_scale")
             Button(
                 onClick = { authViewModel.login(email, password) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp),
-                enabled = authState !is AuthState.Loading,
+                    .height(50.dp)
+                    .graphicsLayer(scaleX = scale, scaleY = scale),
+                enabled = formValid && authState !is AuthState.Loading,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
+                    containerColor = androidx.compose.ui.graphics.Color(0xFF1565C0), // Azul oscuro
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                    disabledContainerColor = androidx.compose.ui.graphics.Color(0xFF1565C0).copy(alpha = 0.4f),
+                    disabledContentColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f)
                 ),
                 shape = MaterialTheme.shapes.small,
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
+                interactionSource = interaction
             ) {
-                Text("Ingresar", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.login), style = MaterialTheme.typography.bodyLarge)
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Botón secundario - azul claro
+            // CTA a registro, tono empático
             TextButton(
                 onClick = onNavigateToRegister,
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.secondary
+                    contentColor = androidx.compose.ui.graphics.Color(0xFF1565C0) // Azul oscuro
                 )
             ) {
                 Text(
-                    "¿No tienes una cuenta? Regístrate",
-                    color = MaterialTheme.colorScheme.onSecondary
+                    text = stringResource(R.string.register),
+                    color = androidx.compose.ui.graphics.Color(0xFF1565C0),
+                    style = MaterialTheme.typography.bodyLarge
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            // CTA a restablecer contraseña
+            TextButton(
+                onClick = onNavigateToReset,
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = androidx.compose.ui.graphics.Color(0xFF1565C0) // Azul oscuro
+                )
+            ) {
+                Text(
+                    text = stringResource(R.string.reset_password),
+                    color = androidx.compose.ui.graphics.Color(0xFF1565C0),
+                    style = MaterialTheme.typography.bodyLarge
                 )
             }
         }
