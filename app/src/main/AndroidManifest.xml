@@ -2,6 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Queries for package visibility (required when resolving specific packages/intents) -->
+    <queries>
+        <!-- Google Maps app -->
+        <package android:name="com.google.android.apps.maps" />
+        <!-- Any app that can view https links (fallback) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Permisos de red necesarios para Firebase/Firestore y cargas de datos -->
     <uses-permission android:name="android.permission.INTERNET" />

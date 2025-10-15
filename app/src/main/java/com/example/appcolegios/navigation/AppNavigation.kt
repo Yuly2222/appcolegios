@@ -46,10 +46,10 @@ import com.example.appcolegios.academico.CalendarScreen
 import com.example.appcolegios.academico.NotesScreen
 import com.example.appcolegios.academico.TasksScreen
 import com.example.appcolegios.auth.LoginActivity
-import com.example.appcolegios.auth.LoginScreen
 import com.example.appcolegios.auth.RegisterScreen
 import com.example.appcolegios.auth.ResetPasswordScreen
 import com.example.appcolegios.auth.SplashScreen
+import com.example.appcolegios.auth.LoginScreen
 import com.example.appcolegios.dashboard.DashboardScreen
 import com.example.appcolegios.home.HomeScreen
 import com.example.appcolegios.mensajes.ChatScreen
@@ -122,17 +122,15 @@ fun AppNavigation(
         NavHost(navController = navController, startDestination = startDestination) {
             composable(AppRoutes.Splash.route) { SplashScreen(navController) }
             composable(AppRoutes.Login.route) {
-                // Redirigir al Login XML
-                val ctx = LocalContext.current
-                LaunchedEffect(Unit) {
-                    (ctx as? Activity)?.let {
-                        it.startActivity(Intent(it, LoginActivity::class.java))
-                        it.finish()
-                    } ?: run {
-                        ctx.startActivity(Intent(ctx, LoginActivity::class.java))
-                    }
-                }
-                Box(Modifier) {}
+                LoginScreen(
+                    onLoginSuccess = {
+                        navController.navigate(AppRoutes.Home.route) {
+                            popUpTo(AppRoutes.Login.route) { inclusive = true }
+                        }
+                    },
+                    onNavigateToRegister = { navController.navigate(AppRoutes.Register.route) },
+                    onNavigateToReset = { navController.navigate(AppRoutes.ResetPassword.route) }
+                )
             }
             composable(AppRoutes.Register.route) {
                 RegisterScreen(

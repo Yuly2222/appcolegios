@@ -1,5 +1,6 @@
 package com.example.appcolegios.academico
 
+import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +22,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.*
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import android.util.Log
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.example.appcolegios.auth.LoginActivity
+import com.google.firebase.auth.ktx.auth
+import com.google.firebase.ktx.Firebase
 
 data class CalendarEvent(
     val id: String,
@@ -38,142 +49,291 @@ enum class EventType {
 fun CalendarScreen() {
     var selectedDate by remember { mutableStateOf(Calendar.getInstance()) }
     var showAddEventDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     // Eventos de ejemplo para el estudiante
     val events = remember {
-        listOf(
-            CalendarEvent(
-                "1",
-                "Examen de Matemáticas",
-                "Capítulos 1-5",
-                Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 2) }.time,
-                EventType.EXAMEN
-            ),
-            CalendarEvent(
-                "2",
-                "Entrega Ensayo",
-                "El Quijote - 500 palabras",
-                Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 5) }.time,
-                EventType.TAREA
-            ),
-            CalendarEvent(
-                "3",
-                "Feria de Ciencias",
-                "Presentación de proyecto",
-                Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 8) }.time,
-                EventType.EVENTO
+        mutableStateListOf<CalendarEvent>().apply {
+            add(
+                CalendarEvent(
+                    "1",
+                    "Examen de Matemáticas",
+                    "Capítulos 1-5",
+                    Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 2) }.time,
+                    EventType.EXAMEN
+                )
             )
-        )
+            add(
+                CalendarEvent(
+                    "2",
+                    "Entrega Ensayo",
+                    "El Quijote - 500 palabras",
+                    Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 5) }.time,
+                    EventType.TAREA
+                )
+            )
+            add(
+                CalendarEvent(
+                    "3",
+                    "Feria de Ciencias",
+                    "Presentación de proyecto",
+                    Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 8) }.time,
+                    EventType.EVENTO
+                )
+            )
+        }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Header con mes actual
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    // Material3: usar SnackbarHostState y Scaffold
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
         ) {
-            IconButton(onClick = {
-                selectedDate = (selectedDate.clone() as Calendar).apply {
-                    add(Calendar.MONTH, -1)
+            // Debug info: mostrar UID y projectId en builds de depuración
+            val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+            if (isDebuggable) {
+                val authDebug = FirebaseAuth.getInstance().currentUser?.uid ?: "<no user>"
+                val projectIdDebug = try { com.google.firebase.FirebaseApp.getInstance().options.projectId } catch (_: Exception) { "unknown" }
+                Text("DEBUG: uid=$authDebug, project=$projectIdDebug", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(8.dp))
+                // Botón debug: iniciar sesión anónima para probar escrituras cuando no hay un usuario real
+                Row(horizontalArrangement = Arrangement.Start) {
+                    Button(onClick = {
+                        if (Firebase.auth.currentUser == null) {
+                            Firebase.auth.signInAnonymously().addOnCompleteListener { task ->
+                                scope.launch {
+                                    if (task.isSuccessful) {
+                                        val u = FirebaseAuth.getInstance().currentUser?.uid ?: "<no user>"
+                                        snackbarHostState.showSnackbar("Sesión anónima iniciada: uid=$u")
+                                    } else {
+                                        snackbarHostState.showSnackbar("Fallo inicio anónimo: ${task.exception?.message}")
+                                    }
+                                }
+                            }
+                        } else {
+                            scope.launch { snackbarHostState.showSnackbar("Ya hay usuario: ${Firebase.auth.currentUser?.uid}") }
+                        }
+                    }) { Text("Iniciar sesión anónima (DEBUG)") }
+                    Spacer(Modifier.width(8.dp))
+                    if (Firebase.auth.currentUser != null) {
+                        Button(onClick = {
+                            Firebase.auth.signOut()
+                            scope.launch { snackbarHostState.showSnackbar("Sesión cerrada") }
+                        }) { Text("Cerrar sesión (DEBUG)") }
+                    }
                 }
-            }) {
-                Icon(Icons.Filled.ChevronLeft, "Mes anterior")
+                Spacer(Modifier.height(8.dp))
             }
 
+            // Header con mes actual
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = {
+                    selectedDate = (selectedDate.clone() as Calendar).apply {
+                        add(Calendar.MONTH, -1)
+                    }
+                }) {
+                    Icon(Icons.Filled.ChevronLeft, "Mes anterior")
+                }
+
+                Text(
+                    text = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(selectedDate.time),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                IconButton(onClick = {
+                    selectedDate = (selectedDate.clone() as Calendar).apply {
+                        add(Calendar.MONTH, 1)
+                    }
+                }) {
+                    Icon(Icons.Filled.ChevronRight, "Mes siguiente")
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Días de la semana
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                listOf("Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb").forEach { day ->
+                    Text(
+                        text = day,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // Grid del calendario
+            CalendarGrid(
+                selectedDate = selectedDate,
+                events = events,
+                onDateSelected = { date ->
+                    selectedDate = date
+                }
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // Botón para agregar evento
+            Button(
+                onClick = { showAddEventDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Add, "Agregar evento")
+                Spacer(Modifier.width(8.dp))
+                Text("Agregar Evento")
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // Lista de eventos
             Text(
-                text = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(selectedDate.time),
-                style = MaterialTheme.typography.titleLarge,
+                "Próximos Eventos",
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
 
-            IconButton(onClick = {
-                selectedDate = (selectedDate.clone() as Calendar).apply {
-                    add(Calendar.MONTH, 1)
+            Spacer(Modifier.height(8.dp))
+
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(events.sortedBy { it.date }) { event ->
+                    EventCard(event)
                 }
-            }) {
-                Icon(Icons.Filled.ChevronRight, "Mes siguiente")
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Días de la semana
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            listOf("Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb").forEach { day ->
-                Text(
-                    text = day,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // Grid del calendario
-        CalendarGrid(
-            selectedDate = selectedDate,
-            events = events,
-            onDateSelected = { date ->
-                selectedDate = date
-            }
-        )
-
-        Spacer(Modifier.height(16.dp))
-
-        // Botón para agregar evento
-        Button(
-            onClick = { showAddEventDialog = true },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Filled.Add, "Agregar evento")
-            Spacer(Modifier.width(8.dp))
-            Text("Agregar Evento")
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        // Lista de eventos
-        Text(
-            "Próximos Eventos",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(events.sortedBy { it.date }) { event ->
-                EventCard(event)
             }
         }
     }
 
     if (showAddEventDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddEventDialog = false },
-            title = { Text("Agregar Evento") },
-            text = { Text("Funcionalidad disponible próximamente") },
-            confirmButton = {
-                TextButton(onClick = { showAddEventDialog = false }) {
-                    Text("Cerrar")
+        AddEventDialog(
+            initialDate = selectedDate.time,
+            onDismiss = { showAddEventDialog = false },
+            onSave = { title, description, date, type ->
+                // Guardar en Firestore en users/{uid}/events/{eventId}
+                val auth = FirebaseAuth.getInstance()
+                val userId = auth.currentUser?.uid
+                if (userId == null) {
+                    scope.launch { snackbarHostState.showSnackbar("Debes iniciar sesión para agregar eventos") }
+                    return@AddEventDialog
                 }
+                val db = FirebaseFirestore.getInstance()
+                val eventId = UUID.randomUUID().toString()
+                val eventData = mapOf(
+                    "id" to eventId,
+                    "title" to title,
+                    "description" to description,
+                    "date" to com.google.firebase.Timestamp(date),
+                    "type" to type.name,
+                    "createdAt" to com.google.firebase.Timestamp.now()
+                )
+                db.collection("users").document(userId).collection("events").document(eventId)
+                    .set(eventData)
+                    .addOnSuccessListener {
+                        // Añadir también a la lista local para feedback inmediato
+                        events.add(CalendarEvent(eventId, title, description, date, type))
+                        showAddEventDialog = false
+                        scope.launch { snackbarHostState.showSnackbar("Evento agregado") }
+                    }
+                    .addOnFailureListener { e ->
+                        // Añadir diagnóstico y manejo espec��fico para permisos
+                        val projectId = try { com.google.firebase.FirebaseApp.getInstance().options.projectId } catch (_: Exception) { null }
+                        val diag = "uid=${userId}, project=${projectId ?: "unknown"}"
+                        Log.e("CalendarScreen", "Error saving event: ${e.message} ($diag)", e)
+                        scope.launch {
+                            val baseMsg = when (e) {
+                                is FirebaseFirestoreException -> when (e.code) {
+                                    FirebaseFirestoreException.Code.PERMISSION_DENIED -> "Permisos insuficientes para guardar el evento. Asegúrate de iniciar sesión y revisar las reglas de Firestore."
+                                    else -> "Error al guardar evento: ${e.message}"
+                                }
+                                else -> "Error al guardar evento: ${e.message}"
+                            }
+                            val res = snackbarHostState.showSnackbar(baseMsg, actionLabel = "Iniciar sesión")
+                            if (res == SnackbarResult.ActionPerformed) {
+                                // Abrir pantalla de login (actividad existente) como fallback
+                                try {
+                                    context.startActivity(Intent(context, LoginActivity::class.java))
+                                } catch (ex: Exception) {
+                                    Log.e("CalendarScreen", "No se pudo abrir LoginActivity: ${ex.message}", ex)
+                                }
+                            }
+                        }
+                     }
             }
         )
     }
+}
+
+@Composable
+private fun AddEventDialog(
+    initialDate: Date,
+    onDismiss: () -> Unit,
+    onSave: (String, String, Date, EventType) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf(initialDate) }
+    var type by remember { mutableStateOf(EventType.EVENTO) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Agregar Evento") },
+        text = {
+            Column {
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título") }, singleLine = true)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descripción") })
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(date)}")
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = {
+                        // Avanzar un día (simple picker inline). Para una implementación completa integrar DatePicker
+                        val cal = Calendar.getInstance().apply { time = date }
+                        cal.add(Calendar.DAY_OF_MONTH, 1)
+                        date = cal.time
+                    }) { Text("Siguiente día") }
+                }
+                Spacer(Modifier.height(8.dp))
+                // Tipo
+                Row { EventType.entries.forEach { ev ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
+                        RadioButton(selected = type == ev, onClick = { type = ev })
+                        Text(ev.name)
+                    }
+                }}
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (title.isBlank()) return@TextButton
+                onSave(title, description, date, type)
+            }) { Text("Guardar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cerrar") }
+        }
+    )
 }
 
 @Composable

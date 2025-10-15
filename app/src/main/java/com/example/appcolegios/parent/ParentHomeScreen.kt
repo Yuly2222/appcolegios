@@ -207,7 +207,7 @@ private fun AcademicSummaryCard(
                 SummaryItem(
                     icon = Icons.Filled.Star,
                     label = "Promedio",
-                    value = String.format("%.1f", averageGrade),
+                    value = String.format(java.util.Locale.getDefault(), "%.1f", averageGrade),
                     color = Color(0xFF2196F3)
                 )
             }

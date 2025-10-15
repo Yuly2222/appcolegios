@@ -1,6 +1,7 @@
 package com.example.appcolegios.auth
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
@@ -36,42 +37,15 @@ fun SplashScreen(navController: NavController) {
     val isConnected = connection === ConnectionStatus.Available
     val scope = rememberCoroutineScope()
 
+    // Lanzar verificación desde una corutina; la lógica heavy está en la función suspend top-level
     fun verifySession() {
         scope.launch {
-            showError = false
-            delay(1500) // Simulate a delay for splash screen
-            if (!isConnected) {
-                showError = true
-                return@launch
-            }
-            val firebaseUser = FirebaseAuth.getInstance().currentUser
-            if (userData.userId != null) {
-                navController.navigate("home") { popUpTo("splash") { inclusive = true } }
-            } else if (firebaseUser != null) {
-                // Fetch role and persist before navigating
-                try {
-                    val snap = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                        .collection("users").document(firebaseUser.uid).get().await()
-                    val roleStr = snap.getString("role")
-                    val name = snap.getString("name") ?: ""
-                    userPreferencesRepository.updateUserData(firebaseUser.uid, roleStr, name)
-                } catch (_: Exception) { /* ignore, defaults later */ }
-                navController.navigate("home") { popUpTo("splash") { inclusive = true } }
-            } else {
-                // Mostrar únicamente el Login de XML
-                val activity = (LocalContext.current as? Activity)
-                activity?.let {
-                    it.startActivity(Intent(it, LoginActivity::class.java))
-                    it.finish()
-                } ?: run {
-                    navController.popBackStack(0, inclusive = true)
-                }
-            }
+            performSessionVerification(context, navController, userPreferencesRepository, userData, isConnected) { showError = it }
         }
     }
 
     LaunchedEffect(key1 = isConnected) {
-        if(isConnected) {
+        if (isConnected) {
             verifySession()
         } else {
             showError = true
@@ -107,5 +81,53 @@ fun SplashScreen(navController: NavController) {
                 CircularProgressIndicator()
             }
         }
+    }
+}
+
+// Mover la lógica de verificación a una función suspend top-level para evitar problemas con
+// funciones locales dentro de un @Composable que podrían capturar llamadas composables.
+suspend fun performSessionVerification(
+    context: Context,
+    navController: NavController,
+    userPreferencesRepository: UserPreferencesRepository,
+    userData: UserData?,
+    isConnected: Boolean,
+    onShowError: (Boolean) -> Unit
+) {
+    onShowError(false)
+    // Mantener la pausa simulada
+    delay(1500)
+    if (!isConnected) {
+        onShowError(true)
+        return
+    }
+
+    val firebaseUser = FirebaseAuth.getInstance().currentUser
+    if (userData?.userId != null) {
+        navController.navigate("home") { popUpTo("splash") { inclusive = true } }
+        return
+    }
+
+    if (firebaseUser != null) {
+        try {
+            val snap = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                .collection("users").document(firebaseUser.uid).get().await()
+            val roleStr = snap.getString("role")
+            val name = snap.getString("name") ?: ""
+            userPreferencesRepository.updateUserData(firebaseUser.uid, roleStr, name)
+        } catch (_: Exception) {
+            // ignore, defaults later
+        }
+        navController.navigate("home") { popUpTo("splash") { inclusive = true } }
+        return
+    }
+
+    // No hay sesión: abrir LoginActivity (XML) si hay Activity disponible, si no usar navController
+    val activity = (context as? Activity)
+    activity?.let {
+        it.startActivity(Intent(it, LoginActivity::class.java))
+        it.finish()
+    } ?: run {
+        navController.popBackStack(0, inclusive = true)
     }
 }

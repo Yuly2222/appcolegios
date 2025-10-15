@@ -138,10 +138,18 @@
     <string name="check_attendance_error_prefix">Error al verificar asistencia: %1$s</string>
 
     <!-- Nuevos strings para la pantalla de Ubicación del colegio y la clave de Google Maps -->
-    <string name="google_maps_key">REEMPLAZA_CON_TU_API_KEY</string>
+    <!-- API key para Google Maps (obtenida de google-services.json). Verifica en Google Cloud que la API esté habilitada y aplica restricciones apropiadas -->
+    <string name="google_maps_key">AIzaSyCfT6iLcrddmyUz7OQ2CIuLaI6eakBgSyM</string>
     <string name="ubicacion_colegio">Ubicación del colegio</string>
     <string name="centrar_en_mi">Centrar en mí</string>
     <string name="ir_al_colegio">Ir al colegio</string>
     <string name="activa_ubicacion_para_ruta">Activa tu ubicación para ver la ruta</string>
     <string name="ubicacion_no_disponible">No pudimos encontrar tu ubicación, pero puedes seguir viendo el colegio en el mapa</string>
+    <!-- EventsActivity strings -->
+    <string name="events_login_required">Inicia sesión para ver tus eventos</string>
+    <string name="events_login_snackbar">Debes iniciar sesión para ver eventos</string>
+    <string name="events_no_events">No hay eventos en este período</string>
+    <string name="events_error_permission">No tienes permisos para ver estos eventos. Inicia sesión con la cuenta correcta o contacta al administrador.</string>
+    <string name="action_login">Iniciar sesión</string>
+    <string name="events_item_format">%1$s • %2$s</string>
 </resources>

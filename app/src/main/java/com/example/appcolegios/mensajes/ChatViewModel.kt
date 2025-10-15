@@ -68,21 +68,46 @@ class ChatViewModel : ViewModel() {
             } catch (_: Exception) { /* nombre/imagen opcional */ }
 
             val convId = conversationIdFor(userId, otherUserId)
-            val conversationRef = db.collection("chats").document(convId).collection("messages")
-            messagesListener = conversationRef
-                .orderBy("fechaHora", Query.Direction.ASCENDING)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        _uiState.value = ChatUiState(isLoading = false, error = error.message, otherUserName = _uiState.value.otherUserName, otherUserAvatarUrl = _uiState.value.otherUserAvatarUrl)
-                        return@addSnapshotListener
+            try {
+                // Comprobar/crear doc meta del chat (asegura participants y evita PERMISSION_DENIED)
+                val chatDocRef = db.collection("chats").document(convId)
+                val chatSnap = try { chatDocRef.get().await() } catch (_: Exception) { null }
+                if (chatSnap == null || !chatSnap.exists()) {
+                    try {
+                        chatDocRef.set(mapOf("participants" to listOf(userId, otherUserId), "updatedAt" to com.google.firebase.Timestamp.now()))
+                    } catch (e: Exception) {
+                        _uiState.value = ChatUiState(isLoading = false, error = "No se pudo preparar chat: ${e.message}", otherUserName = _uiState.value.otherUserName, otherUserAvatarUrl = _uiState.value.otherUserAvatarUrl)
+                        return@launch
                     }
-                    if (snapshot != null) {
-                        val messages = snapshot.toObjects(Message::class.java)
-                        _uiState.value = _uiState.value.copy(messages = messages, isLoading = false)
-                    } else {
-                        _uiState.value = _uiState.value.copy(messages = emptyList(), isLoading = false)
+                } else {
+                    // si no contiene al usuario, intentar agregarlo de forma conservadora
+                    val participants = (chatSnap.data?.get("participants") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
+                    if (!participants.contains(userId)) {
+                        try {
+                            chatDocRef.update("participants", (participants + userId).distinct())
+                        } catch (_: Exception) { /* si falla, igual intentamos attach listener y Firestore reglas mandarán permiso si aplica */ }
                     }
                 }
+
+                // Ahora podemos atachar el listener de forma segura
+                val conversationRef = db.collection("chats").document(convId).collection("messages")
+                messagesListener = conversationRef
+                    .orderBy("fechaHora", Query.Direction.ASCENDING)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            _uiState.value = ChatUiState(isLoading = false, error = error.message, otherUserName = _uiState.value.otherUserName, otherUserAvatarUrl = _uiState.value.otherUserAvatarUrl)
+                            return@addSnapshotListener
+                        }
+                        if (snapshot != null) {
+                            val messages = snapshot.toObjects(Message::class.java)
+                            _uiState.value = _uiState.value.copy(messages = messages, isLoading = false)
+                        } else {
+                            _uiState.value = _uiState.value.copy(messages = emptyList(), isLoading = false)
+                        }
+                    }
+            } catch (e: Exception) {
+                _uiState.value = ChatUiState(isLoading = false, error = e.message, otherUserName = _uiState.value.otherUserName, otherUserAvatarUrl = _uiState.value.otherUserAvatarUrl)
+            }
 
             // Marcar como leída la conversación para el usuario actual
             resetUnreadCount(userId, otherUserId)
@@ -91,7 +116,7 @@ class ChatViewModel : ViewModel() {
 
     private suspend fun fetchUserProfile(uid: String): Pair<String, String?> {
         // Intenta publicProfiles primero
-        val pubDoc = try { db.collection("publicProfiles").document(uid).get().await() } catch (e: Exception) { null }
+        val pubDoc = try { db.collection("publicProfiles").document(uid).get().await() } catch (_: Exception) { null }
         if (pubDoc != null && pubDoc.exists()) {
             val name = pubDoc.getString("name") ?: pubDoc.getString("displayName") ?: pubDoc.getString("email") ?: uid
             val avatar = pubDoc.getString("avatarUrl")
@@ -152,28 +177,28 @@ class ChatViewModel : ViewModel() {
         // Para el emisor: inbox/{toId}
         val fromInboxRef = usersColl.document(fromId).collection("inbox").document(toId)
         fromInboxRef.set(
-            mapOf(
-                "otherUserName" to toName,
-                "otherUserAvatarUrl" to null,
-                "lastMessage" to lastMessage,
-                "lastTimestamp" to now,
-                "unreadCount" to 0
-            ),
-            com.google.firebase.firestore.SetOptions.merge()
-        ).await()
+             mapOf(
+                 "otherUserName" to toName,
+                 "otherUserAvatarUrl" to null,
+                 "lastMessage" to lastMessage,
+                 "lastTimestamp" to now,
+                 "unreadCount" to 0
+             ),
+            SetOptions.merge()
+         ).await()
 
-        // Para el receptor: inbox/{fromId}, incrementar unreadCount
-        val toInboxRef = usersColl.document(toId).collection("inbox").document(fromId)
-        toInboxRef.set(
-            mapOf(
-                "otherUserName" to fromName,
-                "otherUserAvatarUrl" to null,
-                "lastMessage" to lastMessage,
-                "lastTimestamp" to now
-            ),
-            com.google.firebase.firestore.SetOptions.merge()
-        ).await()
-        toInboxRef.update("unreadCount", FieldValue.increment(1)).await()
+         // Para el receptor: inbox/{fromId}, incrementar unreadCount
+         val toInboxRef = usersColl.document(toId).collection("inbox").document(fromId)
+         toInboxRef.set(
+             mapOf(
+                 "otherUserName" to fromName,
+                 "otherUserAvatarUrl" to null,
+                 "lastMessage" to lastMessage,
+                 "lastTimestamp" to now
+             ),
+            SetOptions.merge()
+         ).await()
+         toInboxRef.update("unreadCount", FieldValue.increment(1)).await()
     }
 
     private fun resetUnreadCount(userId: String, otherUserId: String) {

@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -12,10 +13,22 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import java.util.Calendar
 
+@Suppress("unused")
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
@@ -23,182 +36,194 @@ fun LoginScreen(
     onNavigateToReset: () -> Unit,
     authViewModel: AuthViewModel = viewModel()
 ) {
-    // Precargar datos del profesor para pruebas
-    var email by remember { mutableStateOf("hermanitos605@gmail.com") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     val authState by authViewModel.authState.collectAsState()
 
-    val emailValid = remember(email) {
-        android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
-    }
+    val emailValid = remember(email) { android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() }
     val passwordValid = remember(password) { password.length >= 6 }
     val formValid = emailValid && passwordValid
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Logo institucional
-            Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "Logo Institucional",
+    // Visual parameters
+    val primaryBlue = Color(0xFF2D8CF0)
+    val secondaryTone = Color(0xFF1565C0)
+
+    Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .size(120.dp)
-                    .padding(bottom = 24.dp)
-            )
-
-            Text(
-                stringResource(R.string.welcome_friendly),
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                stringResource(R.string.login_subtitle_quick),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Card blanco para contener los campos
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
-                shape = MaterialTheme.shapes.medium,
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
+                // Card container centrado con más espacio y radios suaves
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .wrapContentHeight()
+                        .shadow(10.dp, MaterialTheme.shapes.medium),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text(stringResource(R.string.email)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = email.isNotBlank() && !emailValid,
-                        supportingText = {
-                            if (email.isNotBlank() && !emailValid) {
-                                Text(stringResource(R.string.invalid_email))
+                    // Alineo el contenido interno a la izquierda para jerarquía visual,
+                    // pero la tarjeta en sí está centrada en pantalla.
+                    Column(modifier = Modifier.padding(28.dp), horizontalAlignment = Alignment.Start) {
+                        // Logo integrado con el nombre de la institución
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo),
+                                contentDescription = "Logo",
+                                modifier = Modifier.size(84.dp)
+                            )
+                            Spacer(Modifier.width(14.dp))
+                            Column {
+                                Text(
+                                    text = "Nombre de la Institución",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 20.sp),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.login_subtitle_quick),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            focusedLabelColor = MaterialTheme.colorScheme.primary,
-                            cursorColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+                        }
 
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text(stringResource(R.string.password)) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        isError = password.isNotBlank() && !passwordValid,
-                        supportingText = {
-                            if (password.isNotBlank() && !passwordValid) {
-                                Text(stringResource(R.string.password_too_short))
-                            }
-                        },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            focusedLabelColor = MaterialTheme.colorScheme.primary,
-                            cursorColor = MaterialTheme.colorScheme.primary
-                        )
-                    )
-                }
-            }
+                        Spacer(Modifier.height(26.dp))
 
-            Spacer(modifier = Modifier.height(24.dp))
-
-            when (authState) {
-                is AuthState.Loading -> {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                is AuthState.Error -> {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)
-                        ),
-                        shape = MaterialTheme.shapes.small
-                    ) {
+                        // Título con mayor jerarquía
                         Text(
-                            text = (authState as AuthState.Error).message,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(12.dp)
+                            text = stringResource(R.string.login),
+                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 24.sp),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.fillMaxWidth()
                         )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        // Email field con etiqueta fija encima
+                        Text(text = stringResource(R.string.email), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+                        OutlinedTextField(
+                            value = email,
+                            onValueChange = { email = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            isError = email.isNotBlank() && !emailValid,
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryBlue,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                focusedLabelColor = primaryBlue,
+                                cursorColor = primaryBlue
+                            ),
+                            placeholder = { Text(text = "correo@ejemplo.com", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        )
+                        if (email.isNotBlank() && !emailValid) {
+                            Text(text = stringResource(R.string.invalid_email), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                        }
+
+                        Spacer(Modifier.height(18.dp))
+
+                        // Password field con etiqueta fija encima y icono sutil
+                        Text(text = stringResource(R.string.password), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 6.dp))
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            isError = password.isNotBlank() && !passwordValid,
+                            singleLine = true,
+                            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                            trailingIcon = {
+                                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                    val iconTint = if (passwordVisible) primaryBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+                                        contentDescription = if (passwordVisible) "Ocultar contraseña" else "Mostrar contraseña",
+                                        tint = iconTint,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = primaryBlue,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                focusedLabelColor = primaryBlue,
+                                cursorColor = primaryBlue
+                            ),
+                            placeholder = { Text(text = "••••••••", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        )
+                        if (password.isNotBlank() && !passwordValid) {
+                            Text(text = stringResource(R.string.password_too_short), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Botón principal más prominente con animación de presión
+                        val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        val pressed by interaction.collectIsPressedAsState()
+                        val scale by animateFloatAsState(if (pressed) 0.98f else 1f, label = "login_btn_scale")
+
+                        Button(
+                            onClick = { authViewModel.login(email.trim(), password) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp)
+                                .graphicsLayer(scaleX = scale, scaleY = scale),
+                            enabled = formValid && authState !is AuthState.Loading,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = primaryBlue,
+                                contentColor = Color.White,
+                                disabledContainerColor = primaryBlue.copy(alpha = 0.45f),
+                                disabledContentColor = Color.White.copy(alpha = 0.8f)
+                            ),
+                            shape = MaterialTheme.shapes.medium,
+                            interactionSource = interaction
+                        ) {
+                            Text(text = stringResource(R.string.login), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold, color = Color.White))
+                        }
+
+                        Spacer(Modifier.height(14.dp))
+
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            TextButton(onClick = onNavigateToReset, colors = ButtonDefaults.textButtonColors(contentColor = secondaryTone)) {
+                                Text(text = stringResource(R.string.reset_password), style = MaterialTheme.typography.bodyMedium)
+                            }
+                            TextButton(onClick = onNavigateToRegister, colors = ButtonDefaults.textButtonColors(contentColor = secondaryTone)) {
+                                Text(text = stringResource(R.string.register), style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+
+                        // Mensajes de estado de autenticación
+                        when (authState) {
+                            is AuthState.Loading -> {
+                                Spacer(Modifier.height(12.dp))
+                                CircularProgressIndicator(color = primaryBlue, modifier = Modifier.size(28.dp))
+                            }
+                            is AuthState.Error -> {
+                                Spacer(Modifier.height(12.dp))
+                                Text(text = (authState as AuthState.Error).message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                            }
+                            else -> Unit
+                        }
+
                     }
                 }
-                is AuthState.Authenticated -> { /* Navega abajo */ }
-                else -> {}
-            }
 
-            // Botón principal con microanimación de presión
-            val interaction = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-            val pressed by interaction.collectIsPressedAsState()
-            val scale by animateFloatAsState(if (pressed) 0.98f else 1f, label = "login_btn_scale")
-            Button(
-                onClick = { authViewModel.login(email, password) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-                    .graphicsLayer(scaleX = scale, scaleY = scale),
-                enabled = formValid && authState !is AuthState.Loading,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = androidx.compose.ui.graphics.Color(0xFF1565C0), // Azul oscuro
-                    contentColor = androidx.compose.ui.graphics.Color.White,
-                    disabledContainerColor = androidx.compose.ui.graphics.Color(0xFF1565C0).copy(alpha = 0.4f),
-                    disabledContentColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f)
-                ),
-                shape = MaterialTheme.shapes.small,
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
-                interactionSource = interaction
-            ) {
-                Text(stringResource(R.string.login), style = MaterialTheme.typography.bodyLarge)
-            }
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(30.dp))
 
-            // CTA a registro, tono empático
-            TextButton(
-                onClick = onNavigateToRegister,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = androidx.compose.ui.graphics.Color(0xFF1565C0) // Azul oscuro
-                )
-            ) {
-                Text(
-                    text = stringResource(R.string.register),
-                    color = androidx.compose.ui.graphics.Color(0xFF1565C0),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            // CTA a restablecer contraseña
-            TextButton(
-                onClick = onNavigateToReset,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = androidx.compose.ui.graphics.Color(0xFF1565C0) // Azul oscuro
-                )
-            ) {
-                Text(
-                    text = stringResource(R.string.reset_password),
-                    color = androidx.compose.ui.graphics.Color(0xFF1565C0),
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                // Pie de página pequeño para confianza
+                Text(text = "© ${Calendar.getInstance().get(Calendar.YEAR)} Nombre de la Institución", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
             }
         }
     }

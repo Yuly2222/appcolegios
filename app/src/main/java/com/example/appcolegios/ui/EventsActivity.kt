@@ -1,17 +1,25 @@
 package com.example.appcolegios.ui
 
+import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
+import android.view.LayoutInflater
+import android.view.ViewGroup
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.appcolegios.R
+import com.example.appcolegios.auth.LoginActivity
 import com.google.android.material.chip.Chip
 import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
+import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -51,6 +59,7 @@ class EventsActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         eventsRecyclerView.layoutManager = LinearLayoutManager(this)
+        eventsRecyclerView.adapter = EventsAdapter(emptyList())
     }
 
     private fun setupFilters() {
@@ -74,46 +83,120 @@ class EventsActivity : AppCompatActivity() {
         progressBar.visibility = View.VISIBLE
         emptyStateText.visibility = View.GONE
 
-        val calendar = Calendar.getInstance()
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
+        val auth = FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+        if (currentUser == null) {
+            progressBar.visibility = View.GONE
+            emptyStateText.visibility = View.VISIBLE
+            emptyStateText.text = getString(R.string.events_login_required)
+            Snackbar.make(eventsRecyclerView, getString(R.string.events_login_snackbar), Snackbar.LENGTH_INDEFINITE)
+                .setAction(getString(R.string.action_login)) {
+                    try {
+                        startActivity(Intent(this, LoginActivity::class.java))
+                    } catch (ex: Exception) {
+                        Log.e("EventsActivity", "No se pudo abrir LoginActivity: ${ex.message}", ex)
+                    }
+                }
+                .show()
+            return
+        }
 
-        var startDate = today
-        var endDate = today
+        val calendar = Calendar.getInstance()
+        // Compute start and end Date according to filter, using day boundaries
+        val startCal = (calendar.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val endCal = (calendar.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, 23); set(Calendar.MINUTE, 59); set(Calendar.SECOND, 59); set(Calendar.MILLISECOND, 999)
+        }
 
         when (currentFilter) {
             "week" -> {
-                calendar.add(Calendar.DAY_OF_YEAR, 7)
-                endDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
+                endCal.add(Calendar.DAY_OF_YEAR, 7)
             }
             "month" -> {
-                calendar.add(Calendar.MONTH, 1)
-                endDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
+                endCal.add(Calendar.MONTH, 1)
             }
         }
 
-        firestore.collection("events")
-            .whereGreaterThanOrEqualTo("date", startDate)
-            .whereLessThanOrEqualTo("date", endDate)
+        // Use Firebase Timestamps for range queries (field 'date' is stored as Timestamp)
+        val startTs = com.google.firebase.Timestamp(startCal.time)
+        val endTs = com.google.firebase.Timestamp(endCal.time)
+
+        // Query user's events (subcollection) to respect security rules
+        firestore.collection("users").document(currentUser.uid).collection("events")
+            .whereGreaterThanOrEqualTo("date", startTs)
+            .whereLessThanOrEqualTo("date", endTs)
             .orderBy("date", Query.Direction.ASCENDING)
-            .orderBy("time", Query.Direction.ASCENDING)
             .get()
             .addOnSuccessListener { documents ->
                 progressBar.visibility = View.GONE
 
                 if (documents.isEmpty) {
                     emptyStateText.visibility = View.VISIBLE
-                    emptyStateText.text = "No hay eventos en este período"
+                    emptyStateText.text = getString(R.string.events_no_events)
+                    (eventsRecyclerView.adapter as? EventsAdapter)?.update(emptyList())
                 } else {
-                    // Aquí iría el adaptador con los eventos
-                    // val events = documents.map { it.toObject(Event::class.java) }
-                    // eventsAdapter.submitList(events)
+                    val list = documents.map { doc ->
+                        val title = doc.getString("title") ?: doc.getString("titulo") ?: "Sin título"
+                        val description = doc.getString("description") ?: doc.getString("descripcion") ?: ""
+                        val dateField = doc.get("date")
+                        val dateStr = when (dateField) {
+                            is Timestamp -> SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(dateField.toDate())
+                            is Date -> SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(dateField)
+                            is String -> try { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(dateField)?.let { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(it) } ?: dateField } catch (_: Exception) { dateField }
+                            else -> ""
+                        }
+                        EventItem(title = title, description = description, date = dateStr)
+                    }
+                    emptyStateText.visibility = View.GONE
+                    (eventsRecyclerView.adapter as? EventsAdapter)?.update(list)
                 }
             }
             .addOnFailureListener { e ->
                 progressBar.visibility = View.GONE
-                Snackbar.make(eventsRecyclerView, "Error al cargar eventos: ${e.message}", Snackbar.LENGTH_LONG)
-                    .setAction("Reintentar") { loadEvents() }
+                Log.e("EventsActivity", "Error loading events", e)
+                val message = when (e) {
+                    is FirebaseFirestoreException -> when (e.code) {
+                        FirebaseFirestoreException.Code.PERMISSION_DENIED -> getString(R.string.events_error_permission)
+                        else -> "Error al cargar eventos: ${e.message}"
+                    }
+                    else -> "Error al cargar eventos: ${e.message}"
+                }
+                Snackbar.make(eventsRecyclerView, message, Snackbar.LENGTH_LONG)
+                    .setAction("Iniciar sesión") {
+                        try { startActivity(Intent(this, LoginActivity::class.java)) } catch (_: Exception) {}
+                    }
                     .show()
             }
+    }
+
+    // Simple data holder for adapter
+    data class EventItem(val title: String, val description: String, val date: String)
+
+    // Simple adapter using android.R.layout.simple_list_item_2
+    inner class EventsAdapter(private var items: List<EventItem>) : RecyclerView.Adapter<EventsAdapter.VH>() {
+        inner class VH(itemView: View) : RecyclerView.ViewHolder(itemView) {
+            val tv1: TextView = itemView.findViewById(android.R.id.text1)
+            val tv2: TextView = itemView.findViewById(android.R.id.text2)
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+            val v = LayoutInflater.from(parent.context).inflate(android.R.layout.simple_list_item_2, parent, false)
+            return VH(v)
+        }
+
+        override fun onBindViewHolder(holder: VH, position: Int) {
+            val it = items[position]
+            holder.tv1.text = it.title
+            holder.tv2.text = getString(R.string.events_item_format, it.date, it.description)
+        }
+
+        override fun getItemCount(): Int = items.size
+
+        fun update(newItems: List<EventItem>) {
+            this.items = newItems
+            notifyDataSetChanged()
+        }
     }
 }
