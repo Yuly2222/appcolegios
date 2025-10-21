@@ -1,5 +1,5 @@
 [versions]
-agp = "8.13.0"
+agp = "8.11.1"
 kotlin = "2.0.21"
 coreKtx = "1.17.0"
 junit = "4.13.2"
@@ -27,6 +27,7 @@ swiperefreshlayout = "1.2.0-alpha01"
 composePullRefresh = "1.4.3"
 playServicesMaps = "18.2.0"
 playServicesLocation = "21.2.0"
+googleGms = "4.4.1"
 
 
 [libraries]
@@ -82,3 +83,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+google-gms-google-services = { id = "com.google.gms.google-services", version.ref = "googleGms" }
