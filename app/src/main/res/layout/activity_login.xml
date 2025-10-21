@@ -97,7 +97,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="¿No tienes una cuenta? Regístrate"
-            android:textColor="@color/on_secondary"
+            android:textColor="@color/on_background"
             android:layout_marginTop="16dp"
             android:clickable="true"
             android:focusable="true" />
@@ -107,7 +107,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="¿Olvidaste tu contraseña?"
-            android:textColor="@color/on_secondary"
+            android:textColor="@color/on_background"
             android:layout_marginTop="8dp"
             android:clickable="true"
             android:focusable="true" />

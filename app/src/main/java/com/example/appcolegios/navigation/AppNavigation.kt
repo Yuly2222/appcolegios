@@ -6,6 +6,7 @@ import android.app.Activity
 import android.content.Intent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -49,7 +50,6 @@ import com.example.appcolegios.auth.LoginActivity
 import com.example.appcolegios.auth.RegisterScreen
 import com.example.appcolegios.auth.ResetPasswordScreen
 import com.example.appcolegios.auth.SplashScreen
-import com.example.appcolegios.auth.LoginScreen
 import com.example.appcolegios.dashboard.DashboardScreen
 import com.example.appcolegios.home.HomeScreen
 import com.example.appcolegios.mensajes.ChatScreen
@@ -122,15 +122,16 @@ fun AppNavigation(
         NavHost(navController = navController, startDestination = startDestination) {
             composable(AppRoutes.Splash.route) { SplashScreen(navController) }
             composable(AppRoutes.Login.route) {
-                LoginScreen(
-                    onLoginSuccess = {
-                        navController.navigate(AppRoutes.Home.route) {
-                            popUpTo(AppRoutes.Login.route) { inclusive = true }
-                        }
-                    },
-                    onNavigateToRegister = { navController.navigate(AppRoutes.Register.route) },
-                    onNavigateToReset = { navController.navigate(AppRoutes.ResetPassword.route) }
-                )
+                val context = LocalContext.current
+                LaunchedEffect(Unit) {
+                    val intent = Intent(context, com.example.appcolegios.auth.LoginActivity::class.java)
+                    context.startActivity(intent)
+                    if (context is Activity) {
+                        context.finish()
+                    }
+                }
+                // Puedes mostrar una pantalla vacía o de carga mientras se lanza la actividad
+                Box(modifier = Modifier.fillMaxSize()) {}
             }
             composable(AppRoutes.Register.route) {
                 RegisterScreen(
