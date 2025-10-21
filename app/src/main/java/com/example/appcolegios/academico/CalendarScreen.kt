@@ -97,42 +97,6 @@ fun CalendarScreen() {
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            // Debug info: mostrar UID y projectId en builds de depuración
-            val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-            if (isDebuggable) {
-                val authDebug = FirebaseAuth.getInstance().currentUser?.uid ?: "<no user>"
-                val projectIdDebug = try { com.google.firebase.FirebaseApp.getInstance().options.projectId } catch (_: Exception) { "unknown" }
-                Text("DEBUG: uid=$authDebug, project=$projectIdDebug", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                // Botón debug: iniciar sesión anónima para probar escrituras cuando no hay un usuario real
-                Row(horizontalArrangement = Arrangement.Start) {
-                    Button(onClick = {
-                        if (Firebase.auth.currentUser == null) {
-                            Firebase.auth.signInAnonymously().addOnCompleteListener { task ->
-                                scope.launch {
-                                    if (task.isSuccessful) {
-                                        val u = FirebaseAuth.getInstance().currentUser?.uid ?: "<no user>"
-                                        snackbarHostState.showSnackbar("Sesión anónima iniciada: uid=$u")
-                                    } else {
-                                        snackbarHostState.showSnackbar("Fallo inicio anónimo: ${task.exception?.message}")
-                                    }
-                                }
-                            }
-                        } else {
-                            scope.launch { snackbarHostState.showSnackbar("Ya hay usuario: ${Firebase.auth.currentUser?.uid}") }
-                        }
-                    }) { Text("Iniciar sesión anónima (DEBUG)") }
-                    Spacer(Modifier.width(8.dp))
-                    if (Firebase.auth.currentUser != null) {
-                        Button(onClick = {
-                            Firebase.auth.signOut()
-                            scope.launch { snackbarHostState.showSnackbar("Sesión cerrada") }
-                        }) { Text("Cerrar sesión (DEBUG)") }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-
             // Header con mes actual
             Row(
                 modifier = Modifier.fillMaxWidth(),
