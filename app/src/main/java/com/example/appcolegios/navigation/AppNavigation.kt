@@ -68,6 +68,7 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
+import android.widget.Toast
 
 @Composable
 fun AppNavigation(
@@ -122,12 +123,12 @@ fun AppNavigation(
         NavHost(navController = navController, startDestination = startDestination) {
             composable(AppRoutes.Splash.route) { SplashScreen(navController) }
             composable(AppRoutes.Login.route) {
-                val context = LocalContext.current
+                val localContext = LocalContext.current
                 LaunchedEffect(Unit) {
-                    val intent = Intent(context, com.example.appcolegios.auth.LoginActivity::class.java)
-                    context.startActivity(intent)
-                    if (context is Activity) {
-                        context.finish()
+                    val intent = Intent(localContext, com.example.appcolegios.auth.LoginActivity::class.java)
+                    localContext.startActivity(intent)
+                    if (localContext is Activity) {
+                        localContext.finish()
                     }
                 }
                 // Puedes mostrar una pantalla vacía o de carga mientras se lanza la actividad
@@ -136,11 +137,26 @@ fun AppNavigation(
             composable(AppRoutes.Register.route) {
                 RegisterScreen(
                     onRegisterSuccess = {
-                        navController.navigate(AppRoutes.Login.route) {
-                            popUpTo(AppRoutes.Login.route) { inclusive = true }
+                        // Mostrar mensaje de éxito y volver al Home (limpiando la pila)
+                        Toast.makeText(context, "Registro exitoso", Toast.LENGTH_SHORT).show()
+                        navController.navigate(AppRoutes.Home.route) {
+                            popUpTo(0) { inclusive = true }
                         }
                     },
                     onNavigateToLogin = { navController.popBackStack() }
+                )
+            }
+            // Nueva ruta para registro desde Admin (solo crea documento en Firestore)
+            composable(AppRoutes.RegisterAdmin.route) {
+                RegisterScreen(
+                    onRegisterSuccess = {
+                        Toast.makeText(context, "Usuario creado correctamente", Toast.LENGTH_SHORT).show()
+                        navController.navigate(AppRoutes.Home.route) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    onNavigateToLogin = { navController.popBackStack() },
+                    createOnly = true
                 )
             }
             composable(AppRoutes.ResetPassword.route) {
@@ -159,7 +175,7 @@ fun AppNavigation(
             composable(AppRoutes.Notifications.route) { NotificationsScreen() }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
-            composable(AppRoutes.Admin.route) { AdminScreen() }
+            composable(AppRoutes.Admin.route) { AdminScreen(navController = navController) }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
             // Ruta Ubicación del colegio
             composable(AppRoutes.Ubicacion.route) { UbicacionScreen() }

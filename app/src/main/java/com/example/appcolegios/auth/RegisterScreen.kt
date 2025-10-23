@@ -16,12 +16,18 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 
 @Composable
 fun RegisterScreen(
     onRegisterSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit,
-    authViewModel: AuthViewModel = viewModel()
+    authViewModel: AuthViewModel = viewModel(),
+    createOnly: Boolean = false // si true: crear solo documento en Firestore sin tocar Auth
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -29,6 +35,9 @@ fun RegisterScreen(
     var role by remember { mutableStateOf("ESTUDIANTE") }
     var expanded by remember { mutableStateOf(false) }
     val authState by authViewModel.authState.collectAsState()
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -96,21 +105,25 @@ fun RegisterScreen(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text("Contraseña") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            focusedLabelColor = MaterialTheme.colorScheme.primary,
-                            cursorColor = MaterialTheme.colorScheme.primary
+                    // Solo pedir contraseña cuando NO es createOnly (admin crea cuenta sin auth)
+                    if (!createOnly) {
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("Contraseña") },
+                            visualTransformation = PasswordVisualTransformation(),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
                     // Selector de rol
-                    val roles = listOf("ESTUDIANTE", "PADRE", "DOCENTE")
+                    val roles = if (createOnly) listOf("ESTUDIANTE", "PADRE", "DOCENTE", "ADMIN") else listOf("ESTUDIANTE", "PADRE", "DOCENTE")
                     Box(modifier = Modifier.fillMaxWidth()) {
                         OutlinedTextField(
                             value = role,
@@ -142,11 +155,13 @@ fun RegisterScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
+            // Estados y mensajes
+            var status by remember { mutableStateOf<String?>(null) }
+            var isLoading by remember { mutableStateOf(false) }
+
             when (authState) {
                 is AuthState.Loading -> {
-                    CircularProgressIndicator(
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    if (!createOnly) CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
                 is AuthState.Error -> {
                     Card(
@@ -166,18 +181,51 @@ fun RegisterScreen(
                     }
                 }
                 is AuthState.Authenticated -> {
-                    // El LaunchedEffect se encargará de la navegación
+                    // No hacemos nada aquí cuando createOnly == true
                 }
                 else -> {}
             }
 
             // Botón principal - azul oscuro
             Button(
-                onClick = { authViewModel.register(email, password, displayName, role) },
+                onClick = {
+                    if (createOnly) {
+                        // Crear documento en Firestore sin tocar Auth
+                        scope.launch {
+                            isLoading = true
+                            status = null
+                            try {
+                                val db = FirebaseFirestore.getInstance()
+                                val data = hashMapOf(
+                                    "email" to email,
+                                    "name" to displayName,
+                                    "role" to role,
+                                    "createdAt" to com.google.firebase.Timestamp.now()
+                                )
+                                val coll = when (role.uppercase()) {
+                                    "PADRE" -> "parents"
+                                    "DOCENTE" -> "teachers"
+                                    "ADMIN" -> "admins"
+                                    else -> "students"
+                                }
+                                db.collection(coll).add(data).await()
+                                // Informar éxito
+                                Toast.makeText(context, "Usuario creado correctamente", Toast.LENGTH_SHORT).show()
+                                onRegisterSuccess()
+                            } catch (e: Exception) {
+                                status = "Error al crear usuario: ${e.message}"
+                            } finally {
+                                isLoading = false
+                            }
+                        }
+                    } else {
+                        authViewModel.register(email, password, displayName, role)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
-                enabled = authState !is AuthState.Loading,
+                enabled = !(authState is AuthState.Loading) && !isLoading,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
@@ -201,11 +249,18 @@ fun RegisterScreen(
                     color = MaterialTheme.colorScheme.onSecondary
                 )
             }
+
+            // Mostrar status si existe
+            if (status != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(status!!, color = MaterialTheme.colorScheme.error)
+            }
         }
     }
 
+    // Solo navegar automáticamente si no estamos en modo createOnly
     LaunchedEffect(authState) {
-        if (authState is AuthState.Authenticated) {
+        if (!createOnly && authState is AuthState.Authenticated) {
             onRegisterSuccess()
         }
     }

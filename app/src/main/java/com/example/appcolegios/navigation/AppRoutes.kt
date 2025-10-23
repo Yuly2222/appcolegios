@@ -4,6 +4,7 @@ sealed class AppRoutes(val route: String) {
     object Splash : AppRoutes("splash")
     object Login : AppRoutes("login")
     object Register : AppRoutes("register")
+    object RegisterAdmin : AppRoutes("register_admin")
     object ResetPassword : AppRoutes("reset_password")
     object Home : AppRoutes("home")
     object Profile : AppRoutes("profile")

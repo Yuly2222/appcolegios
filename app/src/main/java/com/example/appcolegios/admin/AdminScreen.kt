@@ -21,9 +21,12 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.data.model.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
+import androidx.navigation.NavController
+import com.example.appcolegios.navigation.AppRoutes
+import com.example.appcolegios.auth.RegisterActivity
 
 @Composable
-fun AdminScreen() {
+fun AdminScreen(navController: NavController) {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
     val userData = userPrefs.userData.collectAsState(initial = UserData(null, null, null)).value
@@ -65,7 +68,7 @@ fun AdminScreen() {
                             val type = parts[0].trim().lowercase()
                             val email = parts[1].trim()
                             val name = parts[2].trim()
-                            val role = when (parts.getOrNull(3)?.trim()?.uppercase()) {
+                            val parsedRole = when (parts.getOrNull(3)?.trim()?.uppercase()) {
                                 "PADRE" -> "PADRE"
                                 "DOCENTE" -> "DOCENTE"
                                 "ADMIN" -> "ADMIN"
@@ -74,11 +77,11 @@ fun AdminScreen() {
                             val data = hashMapOf(
                                 "email" to email,
                                 "name" to name,
-                                "role" to role,
+                                "role" to parsedRole,
                                 "type" to type,
                                 "importedAt" to com.google.firebase.Timestamp.now()
                             )
-                            val coll = when (role) {
+                            val coll = when (parsedRole) {
                                 "PADRE" -> "parents"
                                 "DOCENTE" -> "teachers"
                                 "ADMIN" -> "admins"
@@ -110,6 +113,29 @@ fun AdminScreen() {
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold
         )
+
+        // Nueva tarjeta: Registrar usuario
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ElevatedCard(modifier = Modifier.weight(1f), onClick = {
+                // Lanzar RegisterActivity en modo admin (no afectar sesión)
+                val intent = android.content.Intent(context, RegisterActivity::class.java)
+                intent.putExtra("fromAdmin", true)
+                context.startActivity(intent)
+            }) {
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text("Registrar usuario")
+                }
+            }
+
+            // Mantener tarjeta Admin y Dashboard existentes
+            ElevatedCard(modifier = Modifier.weight(1f), onClick = { /* acción existente */ }) {
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Accesos Admin") }
+            }
+
+            ElevatedCard(modifier = Modifier.weight(1f), onClick = { /* acción existente */ }) {
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Dashboard") }
+            }
+        }
 
         if (status != null) {
             Card(
@@ -165,7 +191,7 @@ fun AdminScreen() {
                             status = null
                             try {
                                 com.example.appcolegios.data.TestDataInitializer.initializeAllTestData()
-                                status = "✅ Datos de prueba inicializados correctamente"
+                                status = "�� Datos de prueba inicializados correctamente"
                             } catch (e: Exception) {
                                 status = "❌ Error: ${e.message}"
                             } finally {
