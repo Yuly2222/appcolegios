@@ -28,7 +28,7 @@
             android:layout_height="wrap_content"
             android:text="Inicio de Sesión"
             android:textSize="24sp"
-            android:textColor="@color/on_background"
+            android:textColor="@color/on_surface"
             android:textStyle="bold"
             android:layout_marginBottom="32dp" />
 
@@ -58,6 +58,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Correo electrónico"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="textEmailAddress" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -74,6 +76,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Contraseña"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="textPassword" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -97,7 +101,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="¿Olvidaste tu contraseña?"
-            android:textColor="@color/on_background"
+            android:textColor="@color/on_surface"
             android:layout_marginTop="8dp"
             android:clickable="true"
             android:focusable="true" />

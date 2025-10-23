@@ -125,7 +125,7 @@ fun AppNavigation(
             composable(AppRoutes.Login.route) {
                 val localContext = LocalContext.current
                 LaunchedEffect(Unit) {
-                    val intent = Intent(localContext, com.example.appcolegios.auth.LoginActivity::class.java)
+                    val intent = Intent(localContext, LoginActivity::class.java)
                     localContext.startActivity(intent)
                     if (localContext is Activity) {
                         localContext.finish()

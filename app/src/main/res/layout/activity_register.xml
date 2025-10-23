@@ -58,6 +58,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Nombre completo"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="textPersonName" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -73,6 +75,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Correo electrónico"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="textEmailAddress" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -88,6 +92,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Documento"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="text" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -103,6 +109,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Teléfono"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="phone" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -119,6 +127,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Contraseña"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="textPassword" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -135,6 +145,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Confirmar contraseña"
+                        android:textColor="@color/on_surface"
+                        android:textColorHint="@color/primary"
                         android:inputType="textPassword" />
                 </com.google.android.material.textfield.TextInputLayout>
 
@@ -174,7 +186,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="¿Ya tienes una cuenta? Inicia Sesión"
-            android:textColor="@color/on_secondary"
+            android:textColor="@color/black"
             android:layout_marginTop="16dp"
             android:clickable="true"
             android:focusable="true" />

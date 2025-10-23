@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component name="RunManager">
+  <configuration default="false" name="app" type="AndroidRunConfigurationType" factoryName="Android App">
+    <!-- Configuración mínima: apuntar al módulo 'app' -->
+    <module name="app" />
+    <option name="DEPLOY" value="true" />
+    <!-- Dejar ACTIVITY_CLASS vacío para usar la actividad de inicio del manifest -->
+    <option name="ACTIVITY_CLASS" value="" />
+    <option name="MODE" value="DEBUG" />
+  </configuration>
+  <list />
+</component>
+
