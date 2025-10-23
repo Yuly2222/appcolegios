@@ -91,16 +91,6 @@
             app:cornerRadius="12dp"
             app:elevation="2dp" />
 
-        <!-- Enlaces secundarios -->
-        <TextView
-            android:id="@+id/registerLink"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="¿No tienes una cuenta? Regístrate"
-            android:textColor="@color/on_background"
-            android:layout_marginTop="16dp"
-            android:clickable="true"
-            android:focusable="true" />
 
         <TextView
             android:id="@+id/resetLink"

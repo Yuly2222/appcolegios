@@ -21,7 +21,6 @@ class LoginActivity : AppCompatActivity() {
         val emailInput: EditText = findViewById(R.id.emailInput)
         val passwordInput: EditText = findViewById(R.id.passwordInput)
         val loginButton: MaterialButton = findViewById(R.id.loginButton)
-        val registerLink: TextView = findViewById(R.id.registerLink)
         val resetLink: TextView = findViewById(R.id.resetLink)
 
         loginButton.setOnClickListener {
@@ -42,9 +41,6 @@ class LoginActivity : AppCompatActivity() {
                         Toast.makeText(this, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                     }
             }
-        }
-        registerLink.setOnClickListener {
-            startActivity(Intent(this, RegisterActivity::class.java))
         }
         resetLink.setOnClickListener {
             startActivity(Intent(this, ResetPasswordActivity::class.java))
