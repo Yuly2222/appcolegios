@@ -31,7 +31,6 @@ import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.example.appcolegios.auth.LoginActivity
 import com.google.firebase.auth.ktx.auth
-import com.google.firebase.ktx.Firebase
 
 data class CalendarEvent(
     val id: String,

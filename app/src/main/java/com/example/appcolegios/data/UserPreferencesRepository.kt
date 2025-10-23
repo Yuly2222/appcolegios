@@ -65,5 +65,9 @@ data class UserData(
     val role: String?, // mantener string para compatibilidad; usar helper de conversión
     val name: String?
 ) {
-    val roleEnum: Role? get() = Role.fromString(role)
+    // Si no hay rol (null o vacío) o la cadena no coincide, asumimos ADMIN
+    val roleEnum: Role? get() = when {
+        role.isNullOrBlank() -> Role.ADMIN
+        else -> Role.fromString(role) ?: Role.ADMIN
+    }
 }

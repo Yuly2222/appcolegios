@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.appcolegios.data.UserPreferencesRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -52,17 +53,19 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun register(email: String, password: String, displayName: String) {
+    fun register(email: String, password: String, displayName: String, role: String = "ADMIN") {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             try {
                 val result = auth.createUserWithEmailAndPassword(email, password).await()
                 val user = result.user
                 if (user != null) {
+                    // Normalizar rol a mayúsculas antes de guardar
+                    val normalizedRole = role.uppercase(Locale.ROOT)
                     val userMap = hashMapOf(
                         "displayName" to displayName,
                         "email" to email,
-                        "role" to "student"
+                        "role" to normalizedRole
                     )
                     firestore.collection("users").document(user.uid).set(userMap).await()
                     _authState.value = AuthState.Idle
@@ -99,7 +102,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val document = firestore.collection("users").document(userId).get().await()
-                val role = document.getString("role") ?: "student"
+                // Si el documento no tiene rol, asumimos 'ADMIN'
+                val role = document.getString("role") ?: "ADMIN"
                 val displayName = document.getString("displayName") ?: ""
 
                 // Guardar datos unificados en preferencias

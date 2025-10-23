@@ -11,6 +11,7 @@ import com.example.appcolegios.R
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.android.material.button.MaterialButton
+import java.util.Locale
 
 class RegisterActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -41,7 +42,9 @@ class RegisterActivity : AppCompatActivity() {
             val phone = phoneInput.text.toString().trim()
             val password = passwordInput.text.toString().trim()
             val confirm = confirmInput.text.toString().trim()
-            val role = roles[roleSpinner.selectedItemPosition]
+            // Obtener rol seleccionado y normalizar a mayúsculas; si está vacío, asumir ADMIN
+            val rawRole = roles.getOrNull(roleSpinner.selectedItemPosition)
+            val role = rawRole?.uppercase(Locale.ROOT) ?: "ADMIN"
 
             if (name.isEmpty() || email.isEmpty() || document.isEmpty() || phone.isEmpty() || password.isEmpty() || confirm.isEmpty()) {
                 Toast.makeText(this, "Todos los campos son obligatorios", Toast.LENGTH_SHORT).show()

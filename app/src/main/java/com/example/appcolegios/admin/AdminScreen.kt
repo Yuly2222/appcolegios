@@ -27,7 +27,8 @@ fun AdminScreen() {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
     val userData = userPrefs.userData.collectAsState(initial = UserData(null, null, null)).value
-    val role = Role.fromString(userData.role)
+    // Tratar rol nulo o vacío como ADMIN
+    val role = if (userData.role.isNullOrBlank()) Role.ADMIN else Role.fromString(userData.role)
 
     if (role != Role.ADMIN) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

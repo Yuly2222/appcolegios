@@ -1,8 +1,11 @@
 package com.example.appcolegios.auth
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +26,8 @@ fun RegisterScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
+    var role by remember { mutableStateOf("ESTUDIANTE") }
+    var expanded by remember { mutableStateOf(false) }
     val authState by authViewModel.authState.collectAsState()
 
     Surface(
@@ -103,6 +108,35 @@ fun RegisterScreen(
                             cursorColor = MaterialTheme.colorScheme.primary
                         )
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // Selector de rol
+                    val roles = listOf("ESTUDIANTE", "PADRE", "DOCENTE")
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = role,
+                            onValueChange = {},
+                            label = { Text("Rol") },
+                            readOnly = true,
+                            trailingIcon = {
+                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null,
+                                    modifier = Modifier.clickable { expanded = !expanded })
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                            roles.forEach { r ->
+                                DropdownMenuItem(text = { Text(r) }, onClick = {
+                                    role = r
+                                    expanded = false
+                                })
+                            }
+                        }
+                    }
                 }
             }
 
@@ -139,7 +173,7 @@ fun RegisterScreen(
 
             // Botón principal - azul oscuro
             Button(
-                onClick = { authViewModel.register(email, password, displayName) },
+                onClick = { authViewModel.register(email, password, displayName, role) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
