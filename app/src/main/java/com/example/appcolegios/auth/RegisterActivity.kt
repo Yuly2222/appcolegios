@@ -1,10 +1,14 @@
 package com.example.appcolegios.auth
 
 import android.content.Intent
+import android.graphics.Color
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appcolegios.R
@@ -36,7 +40,23 @@ class RegisterActivity : AppCompatActivity() {
 
         // Si viene de admin permitir seleccionar ADMIN y ocultar campos de contraseña opcionalmente
         val roles = if (fromAdmin) listOf("ESTUDIANTE", "PADRE", "DOCENTE", "ADMIN") else listOf("ESTUDIANTE", "PADRE", "DOCENTE")
-        roleSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, roles)
+
+        // Adapter personalizado para forzar color de texto (evita que las letras salgan en blanco en temas oscuros)
+        val adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, roles) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent) as TextView
+                v.setTextColor(Color.BLACK)
+                return v
+            }
+
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getDropDownView(position, convertView, parent) as TextView
+                v.setTextColor(Color.BLACK)
+                return v
+            }
+        }
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        roleSpinner.adapter = adapter
 
         // Si es desde admin no mostramos la confirmación de contraseña y password puede ser opcional
         if (fromAdmin) {

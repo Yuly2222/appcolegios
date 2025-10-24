@@ -127,14 +127,9 @@ fun AdminScreen(navController: NavController) {
                 }
             }
 
-            // Mantener tarjeta Admin y Dashboard existentes
-            ElevatedCard(modifier = Modifier.weight(1f), onClick = { /* acción existente */ }) {
-                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Accesos Admin") }
-            }
-
-            ElevatedCard(modifier = Modifier.weight(1f), onClick = { /* acción existente */ }) {
-                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Dashboard") }
-            }
+            // Se eliminaron las tarjetas "Accesos Admin" y "Dashboard" para dejar solo la opción de registrar usuario
+            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.weight(1f))
         }
 
         if (status != null) {
