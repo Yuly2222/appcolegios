@@ -75,6 +75,7 @@ import com.example.appcolegios.student.StudentHomeScreen
 @Composable
 fun AppNavigation(
     startDestination: String = AppRoutes.Splash.route,
+    initialRole: String? = null,
     unreadNotificationsCount: Int = 0,
     unreadMessagesCount: Int = 0
 ) {
@@ -107,7 +108,9 @@ fun AppNavigation(
     val context = LocalContext.current
     val userPrefs = UserPreferencesRepository(context)
     val userData = userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null)).value
-    val isAdmin = (userData.role ?: "").equals("ADMIN", ignoreCase = true)
+    // Preferir el role inyectado (initialRole) para evitar condiciones de carrera; si no está, usar el de prefs
+    val isAdmin = if (!initialRole.isNullOrBlank()) initialRole.equals("ADMIN", ignoreCase = true) else (userData.role ?: "").equals("ADMIN", ignoreCase = true)
+    val isDocente = if (!initialRole.isNullOrBlank()) initialRole.equals("DOCENTE", ignoreCase = true) else (userData.role ?: "").equals("DOCENTE", ignoreCase = true)
 
     val bottomItems = if (isAdmin) {
         listOf(
@@ -180,7 +183,13 @@ fun AppNavigation(
             composable(AppRoutes.Profile.route) { ProfileScreen() }
             composable(AppRoutes.Payments.route) { PaymentsScreen() }
             composable(AppRoutes.Transport.route) { TransportScreen() }
-            composable(AppRoutes.Notes.route) { NotesScreen() }
+            composable(AppRoutes.Notes.route) {
+                if (isDocente) {
+                    com.example.appcolegios.academico.TeacherNotesScreen(navController = navController)
+                } else {
+                    NotesScreen()
+                }
+            }
             composable(AppRoutes.Attendance.route) { AttendanceScreen() }
             composable(AppRoutes.Announcements.route) { AnnouncementsScreen(navController) }
             composable(AppRoutes.Tasks.route) { TasksScreen() }
@@ -292,19 +301,21 @@ fun AppNavigation(
                         )
 
                         // Pagos
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Filled.CreditCard, contentDescription = null) },
-                            label = { Text(stringResource(R.string.payments)) },
-                            selected = currentDestination?.route == AppRoutes.Payments.route,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                navController.navigate(AppRoutes.Payments.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
+                        if (!isDocente) {
+                            NavigationDrawerItem(
+                                icon = { Icon(Icons.Filled.CreditCard, contentDescription = null) },
+                                label = { Text(stringResource(R.string.payments)) },
+                                selected = currentDestination?.route == AppRoutes.Payments.route,
+                                onClick = {
+                                    scope.launch { drawerState.close() }
+                                    navController.navigate(AppRoutes.Payments.route) {
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                },
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+                        }
 
                         // Transporte
                         NavigationDrawerItem(
@@ -475,10 +486,12 @@ fun AppNavigation(
                                     overflowOpen = false
                                     navController.navigate(AppRoutes.Profile.route)
                                 })
-                                DropdownMenuItem(text = { Text(stringResource(R.string.payments)) }, onClick = {
-                                    overflowOpen = false
-                                    navController.navigate(AppRoutes.Payments.route)
-                                })
+                                if (!isDocente) {
+                                    DropdownMenuItem(text = { Text(stringResource(R.string.payments)) }, onClick = {
+                                        overflowOpen = false
+                                        navController.navigate(AppRoutes.Payments.route)
+                                    })
+                                }
                                 DropdownMenuItem(text = { Text(stringResource(R.string.calendar)) }, onClick = {
                                     overflowOpen = false
                                     navController.navigate(AppRoutes.Calendar.route)
