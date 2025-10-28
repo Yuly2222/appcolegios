@@ -26,7 +26,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
@@ -136,12 +135,11 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navControlle
 @Composable
 private fun TeacherCard(
     profileViewModel: ProfileViewModel,
-    initial: com.example.appcolegios.perfil.TeacherProfile?,
+    initial: TeacherProfile?,
     snackbarHostState: SnackbarHostState,
     coroutineScope: kotlinx.coroutines.CoroutineScope,
     userPrefsRepo: UserPreferencesRepository
 ) {
-    val context = LocalContext.current
     var name by remember { mutableStateOf(initial?.nombre ?: "") }
     var phone by remember { mutableStateOf(initial?.phone ?: "") }
     var photoUrl by remember { mutableStateOf(initial?.photoUrl ?: "") }
@@ -190,6 +188,12 @@ private fun TeacherCard(
                             contentDescription = "Avatar",
                             modifier = Modifier.fillMaxSize()
                         )
+                    }
+                    // Usar isUploading para mostrar overlay, evitando que la variable quede sin leer
+                    if (isUploading) {
+                        Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                        }
                     }
                 }
                 Spacer(Modifier.width(12.dp))
@@ -256,6 +260,23 @@ private fun AdminCard(onOpenAdmin: () -> Unit, onCreateUser: () -> Unit) {
 
 @Composable
 private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
+    val profileViewModel: ProfileViewModel = viewModel()
+    val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var photoUrl by remember { mutableStateOf(student.avatarUrl ?: "") }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri != null) {
+            profileViewModel.uploadStudentPhoto(uri) { url ->
+                if (url != null) {
+                    photoUrl = url
+                    coroutineScope.launch { Toast.makeText(context, "Foto subida correctamente", Toast.LENGTH_SHORT).show() }
+                } else {
+                    coroutineScope.launch { Toast.makeText(context, "No se pudo subir la foto", Toast.LENGTH_SHORT).show() }
+                }
+            }
+        }
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -268,15 +289,26 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
             modifier = Modifier.padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Box(modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(Color.LightGray)
+                .clickable { launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
+                if (photoUrl.isBlank()) {
+                    Text(text = "Foto", textAlign = TextAlign.Center)
+                } else {
+                    AsyncImage(model = photoUrl, contentDescription = "Avatar", modifier = Modifier.fillMaxSize())
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
             Text(
                 text = student.nombre,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            Spacer(Modifier.height(16.dp))
-            HorizontalDivider()
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
 
             ProfileInfoRow(
                 label = stringResource(R.string.curso_label),

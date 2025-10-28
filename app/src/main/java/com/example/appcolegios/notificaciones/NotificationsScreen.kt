@@ -8,6 +8,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -27,38 +30,60 @@ fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewMod
     val uiState by notificationsViewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
 
+    var cutoffDays by remember { mutableStateOf<Int?>(7) }
+    val options = listOf(7, 30, 90)
+    var expanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(cutoffDays) { notificationsViewModel.refresh(cutoffDays) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
     ) {
-        if (uiState.isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.align(Alignment.Center),
-                color = MaterialTheme.colorScheme.primary
-            )
-        } else {
-            when {
-                uiState.error != null -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: ""), color = MaterialTheme.colorScheme.error) }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.End) {
+                Text("Mostrar últimos:")
+                Spacer(Modifier.width(8.dp))
+                Box {
+                    Button(onClick = { expanded = true }) { Text(cutoffDays?.toString() ?: "Todos") }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        DropdownMenuItem(text = { Text("7 días") }, onClick = { cutoffDays = 7; expanded = false })
+                        DropdownMenuItem(text = { Text("30 días") }, onClick = { cutoffDays = 30; expanded = false })
+                        DropdownMenuItem(text = { Text("90 días") }, onClick = { cutoffDays = 90; expanded = false })
+                        DropdownMenuItem(text = { Text("Todos") }, onClick = { cutoffDays = null; expanded = false })
+                    }
                 }
-                else -> {
-                    val isDemo = DemoData.isDemoUser()
-                    val dataToShow = if (uiState.notifications.isEmpty() && isDemo) DemoData.demoNotifications() else uiState.notifications
-                    if (dataToShow.isEmpty()) {
+            }
+
+            if (uiState.isLoading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            } else {
+                when {
+                    uiState.error != null -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
-                        ) { Text(stringResource(R.string.no_new_notifications), color = MaterialTheme.colorScheme.onBackground) }
-                    } else {
-                        NotificationList(
-                            groupedNotifications = dataToShow,
-                            onNotificationClick = { notification ->
-                                scope.launch { notificationsViewModel.markAsRead(notification.id) }
-                            }
-                        )
+                        ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: ""), color = MaterialTheme.colorScheme.error) }
+                    }
+                    else -> {
+                        val isDemo = DemoData.isDemoUser()
+                        val dataToShow = if (uiState.notifications.isEmpty() && isDemo) DemoData.demoNotifications() else uiState.notifications
+                        if (dataToShow.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) { Text(stringResource(R.string.no_new_notifications), color = MaterialTheme.colorScheme.onBackground) }
+                        } else {
+                            NotificationList(
+                                groupedNotifications = dataToShow,
+                                onNotificationClick = { notification ->
+                                    scope.launch { notificationsViewModel.markAsRead(notification.id) }
+                                }
+                            )
+                        }
                     }
                 }
             }

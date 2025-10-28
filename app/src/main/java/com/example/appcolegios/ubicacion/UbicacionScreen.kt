@@ -40,6 +40,7 @@ fun UbicacionScreen() {
     // Coordenadas por defecto: Centro Comercial Centro Chía (fallback)
     // Asumimos coordenadas aproximadas; actualízalas si tienes las oficiales.
     val centroChia = remember { LatLng(4.8933, -73.9978) }
+    val universidadLaSabana = remember { LatLng(4.8357, -74.0228) } // Coordenadas aproximadas
 
     // Strings extraídas en scope composable
     val ubicacionTitle = stringResource(R.string.ubicacion_colegio)
@@ -168,6 +169,61 @@ fun UbicacionScreen() {
             ) { Text(stringResource(R.string.ir_al_colegio)) }
         }
 
+        // Nuevo botón para navegar a la Universidad de La Sabana
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Button(
+                onClick = {
+                    FirebaseAnalytics.getInstance(context).logEvent("ubicacion_click_ir_universidad", null)
+                    // Intentar centrar el mapa en la ubicación de la universidad
+                    googleMap?.animateCamera(CameraUpdateFactory.newLatLngZoom(universidadLaSabana, 16f))
+                },
+                modifier = Modifier.weight(1f).height(56.dp)
+            ) { Text("Ir a Universidad") }
+
+            // Botón para obtener direcciones desde mi ubicación a la universidad
+            Button(
+                onClick = {
+                    FirebaseAnalytics.getInstance(context).logEvent("ubicacion_click_direccion_universidad", null)
+                    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+                    val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+                    if (fine == PackageManager.PERMISSION_GRANTED || coarse == PackageManager.PERMISSION_GRANTED) {
+                        // Obtener la última ubicación conocida
+                        fused.lastLocation.addOnSuccessListener { location ->
+                            if (location != null) {
+                                val miUbicacion = LatLng(location.latitude, location.longitude)
+                                // Calcular la distancia en metros usando Haversine
+                                val distancia = haversine(miUbicacion, universidadLaSabana)
+                                // Calcular el tiempo estimado en minutos (suponiendo una velocidad promedio de 60 km/h)
+                                val tiempoEstimado = (distancia / 1000) / 60
+                                // Mostrar un mensaje con el tiempo estimado
+                                Toast.makeText(context, "Tiempo estimado: ${tiempoEstimado.toInt()} min", Toast.LENGTH_SHORT).show()
+                                // Abrir Google Maps con las direcciones
+                                val uriStr = "https://www.google.com/maps/dir/?api=1&origin=${location.latitude},${location.longitude}&destination=${universidadLaSabana.latitude},${universidadLaSabana.longitude}&travelmode=driving"
+                                val uri = uriStr.toUri()
+                                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                            } else {
+                                Toast.makeText(context, "No se pudo obtener tu ubicación actual", Toast.LENGTH_SHORT).show()
+                            }
+                        }.addOnFailureListener {
+                            Toast.makeText(context, "Error al obtener la ubicación: ${it.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        // Solicitar permisos
+                        permissionLauncher.launch(arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ))
+                    }
+                },
+                modifier = Modifier.weight(1f).height(56.dp)
+            ) { Text("Ruta a Universidad") }
+        }
+
         errorMessage?.let { msg ->
             Spacer(Modifier.height(8.dp))
             Text(
@@ -267,4 +323,20 @@ fun getSigningSha1(context: Context): String? {
         e.printStackTrace()
     }
     return null
+}
+
+// Función para calcular la distancia entre dos puntos usando la fórmula de Haversine
+private fun haversine(latLng1: LatLng, latLng2: LatLng): Double {
+    val R = 6371000 // Radio de la Tierra en metros
+    val lat1 = latLng1.latitude * Math.PI / 180
+    val lat2 = latLng2.latitude * Math.PI / 180
+    val deltaLat = (latLng2.latitude - latLng1.latitude) * Math.PI / 180
+    val deltaLng = (latLng2.longitude - latLng1.longitude) * Math.PI / 180
+
+    val a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+            Math.cos(lat1) * Math.cos(lat2) *
+            Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2)
+    val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+
+    return R * c // Devuelve la distancia en metros
 }

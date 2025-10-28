@@ -84,24 +84,16 @@ fun AppNavigation(
     val backStackEntry = navController.currentBackStackEntryAsState().value
     val currentDestination = backStackEntry?.destination
 
-    // Rutas donde se muestra la chrome (top bar, bottom bar, drawer)
-    val mainRoutes = setOf(
-        AppRoutes.Home.route,
-        AppRoutes.Messages.route,
-        AppRoutes.Notifications.route,
-        AppRoutes.Profile.route,
-        AppRoutes.Payments.route,
-        AppRoutes.Transport.route,
-        AppRoutes.Notes.route,
-        AppRoutes.Attendance.route,
-        AppRoutes.Tasks.route,
-        AppRoutes.Calendar.route,
-        AppRoutes.Dashboard.route,
-        AppRoutes.TeacherHome.route,
-        AppRoutes.StudentHome.route
+    // Mostrar chrome en todas las rutas salvo pantallas de auth/splash
+    val authlessRoutes = setOf(
+        AppRoutes.Splash.route,
+        AppRoutes.Login.route,
+        AppRoutes.Register.route,
+        AppRoutes.VerifyEmail.route,
+        AppRoutes.ResetPassword.route
     )
 
-    val showChrome = currentDestination?.route in mainRoutes
+    val showChrome = currentDestination?.route !in authlessRoutes
 
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -110,8 +102,10 @@ fun AppNavigation(
     val userPrefs = UserPreferencesRepository(context)
     val userData = userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null)).value
     // Preferir el role inyectado (initialRole) para evitar condiciones de carrera; si no está, usar el de prefs
-    val isAdmin = if (!initialRole.isNullOrBlank()) initialRole.equals("ADMIN", ignoreCase = true) else (userData.role ?: "").equals("ADMIN", ignoreCase = true)
-    val isDocente = if (!initialRole.isNullOrBlank()) initialRole.equals("DOCENTE", ignoreCase = true) else (userData.role ?: "").equals("DOCENTE", ignoreCase = true)
+    val roleString = if (!initialRole.isNullOrBlank()) initialRole else (userData.role ?: "" )
+    val isAdmin = roleString.equals("ADMIN", ignoreCase = true)
+    val isDocente = roleString.equals("DOCENTE", ignoreCase = true)
+    val isStudent = roleString.equals("ESTUDIANTE", ignoreCase = true)
 
     val bottomItems = if (isAdmin) {
         listOf(
@@ -221,12 +215,15 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
-            composable(AppRoutes.VerifyEmail.route) { VerifyEmailScreen(onDone = {
-                // Volver al login/splash
-                navController.navigate(AppRoutes.Splash.route) {
+            composable(AppRoutes.VerifyEmail.route) {
+                VerifyEmailScreen(onDone = { navController.navigate(AppRoutes.Splash.route) {
                     popUpTo(0) { inclusive = true }
-                }
-            }) }
+                } }, onVerified = { dest ->
+                    navController.navigate(dest) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                })
+            }
         }
     }
 
@@ -309,7 +306,7 @@ fun AppNavigation(
                         )
 
                         // Pagos
-                        if (!isDocente) {
+                        if (!isStudent && !isDocente) {
                             NavigationDrawerItem(
                                 icon = { Icon(Icons.Filled.CreditCard, contentDescription = null) },
                                 label = { Text(stringResource(R.string.payments)) },
@@ -423,11 +420,16 @@ fun AppNavigation(
                         selected = false,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            // lanzar actividad de login para cerrar sesión
-                            val activity = context as? Activity
-                            val intent = Intent(context, LoginActivity::class.java)
-                            context.startActivity(intent)
-                            activity?.finish()
+                            // limpiar datos locales y lanzar actividad de login para cerrar sesión
+                            scope.launch {
+                                try {
+                                    userPrefs.clearAllUserData()
+                                } catch (_: Exception) {}
+                                val activity = context as? Activity
+                                val intent = Intent(context, LoginActivity::class.java)
+                                context.startActivity(intent)
+                                activity?.finish()
+                            }
                         },
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
@@ -465,16 +467,6 @@ fun AppNavigation(
                             }
                         },
                         actions = {
-                            // Home
-                            IconButton(onClick = {
-                                navController.navigate(AppRoutes.Home.route) {
-                                    launchSingleTop = true
-                                    restoreState = true
-                                    popUpTo(AppRoutes.Home.route) { inclusive = false; saveState = true }
-                                }
-                            }) {
-                                Icon(Icons.Filled.Home, contentDescription = stringResource(R.string.home))
-                            }
                             // Notificaciones con badge
                             IconButton(onClick = { navController.navigate(AppRoutes.Notifications.route) }) {
                                 BadgedBox(badge = {
@@ -494,7 +486,7 @@ fun AppNavigation(
                                     overflowOpen = false
                                     navController.navigate(AppRoutes.Profile.route)
                                 })
-                                if (!isDocente) {
+                                if (!isStudent && !isDocente) {
                                     DropdownMenuItem(text = { Text(stringResource(R.string.payments)) }, onClick = {
                                         overflowOpen = false
                                         navController.navigate(AppRoutes.Payments.route)

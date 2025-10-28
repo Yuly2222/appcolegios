@@ -53,8 +53,7 @@ class UserPreferencesRepository(context: Context) {
     }
 
     // Limpia todos los datos del usuario al cerrar sesión
-    @Suppress("unused")
-    suspend fun clearUserData() {
+    suspend fun clearAllUserData() {
         dataStore.edit { preferences ->
             preferences.clear()
         }

@@ -30,11 +30,11 @@ class NotificationsViewModel : ViewModel() {
         refresh()
     }
 
-    fun refresh() {
-        loadNotifications()
+    fun refresh(cutoffDays: Int? = null) {
+        loadNotifications(cutoffDays)
     }
 
-    private fun loadNotifications() {
+    private fun loadNotifications(cutoffDays: Int? = null) {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid
             if (userId == null) {
@@ -44,10 +44,18 @@ class NotificationsViewModel : ViewModel() {
 
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-                val snapshot = db.collection("users").document(userId)
+                var query = db.collection("users").document(userId)
                     .collection("notifications")
                     .orderBy("fechaHora", Query.Direction.DESCENDING)
-                    .get().await()
+
+                if (cutoffDays != null) {
+                    val cal = Calendar.getInstance()
+                    cal.add(Calendar.DAY_OF_YEAR, -cutoffDays)
+                    val cutoff = com.google.firebase.Timestamp(cal.time)
+                    query = query.whereGreaterThanOrEqualTo("fechaHora", cutoff)
+                }
+
+                val snapshot = query.get().await()
 
                 val notifications = snapshot.documents.mapNotNull { doc ->
                     val n = doc.toObject(Notification::class.java)

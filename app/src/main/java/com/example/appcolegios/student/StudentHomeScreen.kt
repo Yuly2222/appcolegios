@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.compose.runtime.collectAsState
 import com.example.appcolegios.data.UserData
+import kotlinx.coroutines.tasks.await
 
 // Estado simplificado para el dashboard de estudiante
 data class StudentDashboardState(
@@ -58,12 +59,44 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
 
     LaunchedEffect(displayName, storedUser) {
         val nameToUse = displayName?.takeIf { it.isNotBlank() } ?: storedUser.name ?: "Estudiante"
-        // Cargar datos de ejemplo rápidos (puedes reemplazar por ViewModel más tarde)
+        // Cargar cursos reales desde Firestore si existe userId
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val coursesList = mutableListOf<CourseInfo>()
+        val classesToday = mutableListOf<ClassInfo>()
+        val activities = mutableListOf<ActivityInfo>()
+        try {
+            val uid = auth.currentUser?.uid
+            if (!uid.isNullOrBlank()) {
+                val studentDoc = db.collection("students").document(uid).get().await()
+                val curso = studentDoc.getString("curso") ?: ""
+                val courseIds = studentDoc.get("courses") as? List<*>
+                if (!courseIds.isNullOrEmpty()) {
+                    for (cid in courseIds) {
+                        val cdoc = db.collection("courses").document(cid.toString()).get().await()
+                        if (cdoc.exists()) {
+                            val name = cdoc.getString("name") ?: "Curso"
+                            val subject = cdoc.getString("subject") ?: cdoc.getString("materia") ?: ""
+                            val studentsSnap = db.collection("courses").document(cdoc.id).collection("students").get().await()
+                            val count = studentsSnap.size()
+                            coursesList.add(CourseInfo(name, count, subject))
+                        }
+                    }
+                } else if (curso.isNotBlank()) {
+                    // Fallback: usar curso en el perfil
+                    coursesList.add(CourseInfo(curso, 0, ""))
+                }
+                // TODO: cargar clases y actividades reales si el esquema existe
+            }
+        } catch (_: Exception) {
+            // ignorar
+        }
+
         state = StudentDashboardState(
             studentName = nameToUse,
-            enrolledCourses = listOf(CourseInfo("Matemáticas 101", 30, "Matemáticas")), // solo 1 curso
-            todayClasses = listOf(ClassInfo("Matemáticas", "A1", "08:00", "Sala 1")),
-            recentActivities = listOf(ActivityInfo("Tarea 1", "Tarea", "Matemáticas", "2025-11-01")),
+            enrolledCourses = coursesList.ifEmpty { listOf(CourseInfo("Matemáticas 101", 30, "Matemáticas")) },
+            todayClasses = classesToday.ifEmpty { listOf(ClassInfo("Matemáticas", "A1", "08:00", "Sala 1")) },
+            recentActivities = activities.ifEmpty { listOf(ActivityInfo("Tarea 1", "Tarea", "Matemáticas", "2025-11-01")) },
             loading = false
         )
     }

@@ -1,4 +1,4 @@
-@file:Suppress("RedundantQualifierName")
+@file:Suppress("RedundantQualifierName", "RemoveRedundantQualifierName", "RedundantQualifiedName", "RedundantQualifier", "UNUSED", "unused")
 
 package com.example.appcolegios.admin
 
@@ -31,6 +31,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import org.apache.poi.ss.usermodel.Row
+import com.example.appcolegios.data.TestDataInitializer
 
 // Helper local para leer celdas de forma segura
 private fun safeCellValue(row: Row, index: Int): String? = row.getCell(index)?.toString()?.trim()?.takeIf { it.isNotBlank() }
@@ -101,23 +102,27 @@ fun AdminScreen() {
 
                                     if (cellCount >= 9) {
                                         nombre = row.getCell(0)?.toString()?.trim() ?: ""
-                                        apellidos = row.getCell(1)?.toString()?.trim() ?: ""
-                                        tipo = row.getCell(2)?.toString()?.trim() ?: ""
+                                        @Suppress("RemoveRedundantQualifierName")
+                                        apellidos = safeCellValue(row, 1) ?: ""
+                                        @Suppress("RemoveRedundantQualifierName")
+                                        tipo = safeCellValue(row, 2) ?: ""
                                         // salto campos intermedios
-                                        email = safeCellValue(row,6) ?: ""
+                                        email = safeCellValue(row, 6) ?: ""
                                         val cell7 = safeCellValue(row,7)
                                         pass = cell7
                                         // leer rol
                                         val rawRol = safeCellValue(row,8) ?: ""
                                         rol = if (rawRol.isBlank()) "ESTUDIANTE" else rawRol
                                     } else if (cellCount >= 5) {
-                                        nombre = row.getCell(0)?.toString()?.trim() ?: ""
-                                        apellidos = row.getCell(1)?.toString()?.trim() ?: ""
-                                        tipo = row.getCell(2)?.toString()?.trim() ?: ""
-                                        email = row.getCell(3)?.toString()?.trim() ?: ""
-                                        rol = row.getCell(4)?.toString()?.trim() ?: "ESTUDIANTE"
+                                        nombre = safeCellValue(row, 0) ?: row.getCell(0)?.toString()?.trim() ?: ""
+                                        @Suppress("RemoveRedundantQualifierName")
+                                        apellidos = safeCellValue(row, 1) ?: ""
+                                        @Suppress("RemoveRedundantQualifierName")
+                                        tipo = safeCellValue(row, 2) ?: ""
+                                        email = safeCellValue(row, 3) ?: ""
+                                        rol = safeCellValue(row, 4) ?: "ESTUDIANTE"
                                         // si hay columna 5 posible password
-                                        if (cellCount > 5) pass = row.getCell(5)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                                        if (cellCount > 5) pass = safeCellValue(row, 5)
                                     } else {
                                         // intentar una heuristica: buscar el primer email-like cell
                                         for (c in 0 until cellCount) {
@@ -373,7 +378,7 @@ fun AdminScreen() {
                             isLoading = true
                             status = null
                             try {
-                                com.example.appcolegios.data.TestDataInitializer.initializeAllTestData()
+                                TestDataInitializer.initializeAllTestData()
                                 status = "✅ Datos de prueba inicializados correctamente"
                             } catch (e: Exception) {
                                 status = "❌ Error: ${e.message}"

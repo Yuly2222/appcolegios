@@ -122,7 +122,6 @@ class ProfileViewModel : ViewModel() {
             if (userId == null) { onResult(null); return@launch }
             try {
                 val ref = FirebaseStorage.getInstance().reference.child("avatars/$userId.jpg")
-                // putFile no es un Task<T> de com.google.android.gms.tasks, así que usamos callbacks y suspendCancellableCoroutine
                 val downloadUrl = suspendCancellableCoroutine<String?> { cont ->
                     val uploadTask = ref.putFile(uri)
                     uploadTask.addOnSuccessListener {
@@ -137,12 +136,44 @@ class ProfileViewModel : ViewModel() {
                     saveTeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, _teacherState.value?.getOrNull()?.phone, downloadUrl)
                 }
                 onResult(downloadUrl)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 onResult(null)
             }
         }
     }
 
-    // Helper público para obtener el email actual del usuario (UI lo consulta)
+    // Subir foto para estudiante y actualizar en 'students' y 'users'
+    fun uploadStudentPhoto(uri: Uri, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid
+            if (userId == null) { onResult(null); return@launch }
+            try {
+                val ref = FirebaseStorage.getInstance().reference.child("avatars/$userId.jpg")
+                val downloadUrl = suspendCancellableCoroutine<String?> { cont ->
+                    val uploadTask = ref.putFile(uri)
+                    uploadTask.addOnSuccessListener {
+                        ref.downloadUrl.addOnSuccessListener { uri2 -> cont.resume(uri2.toString()) }
+                            .addOnFailureListener { cont.resume(null) }
+                    }.addOnFailureListener {
+                        cont.resume(null)
+                    }
+                }
+                if (downloadUrl != null) {
+                    // actualizar documento students y users
+                    try {
+                        db.collection("students").document(userId).set(mapOf("avatarUrl" to downloadUrl), com.google.firebase.firestore.SetOptions.merge()).await()
+                    } catch (_: Exception) {}
+                    try {
+                        db.collection("users").document(userId).set(mapOf("avatarUrl" to downloadUrl), com.google.firebase.firestore.SetOptions.merge()).await()
+                    } catch (_: Exception) {}
+                }
+                onResult(downloadUrl)
+            } catch (_: Exception) {
+                onResult(null)
+            }
+        }
+    }
+
+    // Helper público para obtener el email current del usuario (UI lo consulta)
     fun getCurrentUserEmail(): String? = auth.currentUser?.email
 }

@@ -1,6 +1,5 @@
 package com.example.appcolegios.academico
 
-import android.content.pm.ApplicationInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -30,7 +29,7 @@ import android.content.Intent
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.example.appcolegios.auth.LoginActivity
-import com.google.firebase.auth.ktx.auth
+import kotlinx.coroutines.tasks.await
 
 data class CalendarEvent(
     val id: String,
@@ -50,36 +49,34 @@ fun CalendarScreen() {
     var showAddEventDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
-    // Eventos de ejemplo para el estudiante
-    val events = remember {
-        mutableStateListOf<CalendarEvent>().apply {
-            add(
-                CalendarEvent(
-                    "1",
-                    "Examen de Matemáticas",
-                    "Capítulos 1-5",
-                    Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 2) }.time,
-                    EventType.EXAMEN
-                )
-            )
-            add(
-                CalendarEvent(
-                    "2",
-                    "Entrega Ensayo",
-                    "El Quijote - 500 palabras",
-                    Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 5) }.time,
-                    EventType.TAREA
-                )
-            )
-            add(
-                CalendarEvent(
-                    "3",
-                    "Feria de Ciencias",
-                    "Presentación de proyecto",
-                    Calendar.getInstance().apply { add(Calendar.DAY_OF_MONTH, 8) }.time,
-                    EventType.EVENTO
-                )
-            )
+    // Eventos de ejemplo eliminado: ahora se cargan desde Firestore
+    val events = remember { mutableStateListOf<CalendarEvent>() }
+    val auth = FirebaseAuth.getInstance()
+    val db = FirebaseFirestore.getInstance()
+
+    // Cargar eventos desde Firestore para el usuario
+    LaunchedEffect(Unit) {
+        val userId = auth.currentUser?.uid
+        if (userId != null) {
+            try {
+                val snaps = db.collection("users").document(userId).collection("events").get().await()
+                events.clear()
+                for (doc in snaps.documents) {
+                    val id = doc.id
+                    val title = doc.getString("title") ?: "Evento"
+                    val description = doc.getString("description") ?: ""
+                    val tsAny = doc.get("date")
+                    val ts = when (tsAny) {
+                        is com.google.firebase.Timestamp -> tsAny.toDate()
+                        is Date -> tsAny
+                        else -> null
+                    }
+                    val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
+                    if (ts != null) events.add(CalendarEvent(id, title, description, ts, type))
+                }
+            } catch (_: Exception) {
+                // ignore
+            }
         }
     }
 
@@ -183,6 +180,17 @@ fun CalendarScreen() {
             ) {
                 items(events.sortedBy { it.date }) { event ->
                     EventCard(event)
+                    Spacer(Modifier.height(6.dp))
+                    // boton eliminar
+                    Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = {
+                            // eliminar evento
+                            val userId = auth.currentUser?.uid ?: return@TextButton
+                            db.collection("users").document(userId).collection("events").document(event.id)
+                                .delete()
+                                .addOnSuccessListener { events.removeAll { it.id == event.id } }
+                        }) { Text("Eliminar") }
+                    }
                 }
             }
         }
@@ -194,7 +202,6 @@ fun CalendarScreen() {
             onDismiss = { showAddEventDialog = false },
             onSave = { title, description, date, type ->
                 // Guardar en Firestore en users/{uid}/events/{eventId}
-                val auth = FirebaseAuth.getInstance()
                 val userId = auth.currentUser?.uid
                 if (userId == null) {
                     scope.launch { snackbarHostState.showSnackbar("Debes iniciar sesión para agregar eventos") }
@@ -219,7 +226,7 @@ fun CalendarScreen() {
                         scope.launch { snackbarHostState.showSnackbar("Evento agregado") }
                     }
                     .addOnFailureListener { e ->
-                        // Añadir diagnóstico y manejo espec��fico para permisos
+                        // Añadir diagnóstico y manejo específico para permisos
                         val projectId = try { com.google.firebase.FirebaseApp.getInstance().options.projectId } catch (_: Exception) { null }
                         val diag = "uid=${userId}, project=${projectId ?: "unknown"}"
                         Log.e("CalendarScreen", "Error saving event: ${e.message} ($diag)", e)
