@@ -139,7 +139,7 @@
 
     <!-- Nuevos strings para la pantalla de Ubicación del colegio y la clave de Google Maps -->
     <!-- API key para Google Maps (obtenida de google-services.json). Verifica en Google Cloud que la API esté habilitada y aplica restricciones apropiadas -->
-    <string name="google_maps_key">AIzaSyCfT6iLcrddmyUz7OQ2CIuLaI6eakBgSyM</string>
+    <string name="google_maps_key">AIzaSyAKTZmXzTKuEfbyWExNfcTdU34i_Qa6o3U</string>
     <string name="ubicacion_colegio">Ubicación del colegio</string>
     <string name="centrar_en_mi">Centrar en mí</string>
     <string name="ir_al_colegio">Ir al colegio</string>

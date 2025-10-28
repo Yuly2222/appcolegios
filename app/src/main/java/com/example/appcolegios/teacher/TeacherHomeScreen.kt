@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.example.appcolegios.navigation.AppRoutes
 
 data class TeacherDashboardState(
     val teacherName: String = "",
@@ -45,7 +47,7 @@ data class ActivityInfo(
 )
 
 @Composable
-fun TeacherHomeScreen() {
+fun TeacherHomeScreen(navController: NavController) {
     var state by remember { mutableStateOf(TeacherDashboardState()) }
 
     LaunchedEffect(Unit) {
@@ -73,7 +75,7 @@ fun TeacherHomeScreen() {
 
             // Acciones rápidas
             item {
-                QuickActionsCard()
+                QuickActionsCard(navController)
             }
 
             // Clases de hoy
@@ -155,7 +157,7 @@ private fun TeacherInfoCard(teacherName: String, coursesCount: Int) {
 }
 
 @Composable
-private fun QuickActionsCard() {
+private fun QuickActionsCard(navController: NavController) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -182,7 +184,7 @@ private fun QuickActionsCard() {
                 QuickActionButton(
                     icon = Icons.Filled.CheckCircle,
                     label = "Asistencia",
-                    onClick = { /* Navegar a asistencia */ }
+                    onClick = { navController.navigate(AppRoutes.Attendance.route) }
                 )
 
                 QuickActionButton(
@@ -194,13 +196,13 @@ private fun QuickActionsCard() {
                 QuickActionButton(
                     icon = Icons.AutoMirrored.Filled.Assignment,
                     label = "Tarea",
-                    onClick = { /* Navegar a nueva tarea */ }
+                    onClick = { navController.navigate(com.example.appcolegios.navigation.AppRoutes.Tasks.route) }
                 )
 
                 QuickActionButton(
                     icon = Icons.AutoMirrored.Filled.Message,
                     label = "Comunicado",
-                    onClick = { /* Navegar a mensajes */ }
+                    onClick = { navController.navigate(com.example.appcolegios.navigation.AppRoutes.Announcements.route) }
                 )
             }
         }

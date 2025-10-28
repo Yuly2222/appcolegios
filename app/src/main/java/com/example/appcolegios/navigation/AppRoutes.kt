@@ -12,6 +12,7 @@ sealed class AppRoutes(val route: String) {
     object Transport : AppRoutes("transport")
     object Notes : AppRoutes("notes")
     object Attendance : AppRoutes("attendance")
+    object Announcements : AppRoutes("announcements")
     object Tasks : AppRoutes("tasks")
     object Notifications : AppRoutes("notifications")
     object Messages : AppRoutes("messages")

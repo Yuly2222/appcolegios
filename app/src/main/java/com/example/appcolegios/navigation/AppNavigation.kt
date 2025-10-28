@@ -43,6 +43,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.appcolegios.R
 import com.example.appcolegios.academico.AttendanceScreen
+import com.example.appcolegios.academico.AnnouncementsScreen
 import com.example.appcolegios.academico.CalendarScreen
 import com.example.appcolegios.academico.NotesScreen
 import com.example.appcolegios.academico.TasksScreen
@@ -175,13 +176,14 @@ fun AppNavigation(
             composable(AppRoutes.Transport.route) { TransportScreen() }
             composable(AppRoutes.Notes.route) { NotesScreen() }
             composable(AppRoutes.Attendance.route) { AttendanceScreen() }
+            composable(AppRoutes.Announcements.route) { AnnouncementsScreen(navController) }
             composable(AppRoutes.Tasks.route) { TasksScreen() }
             composable(AppRoutes.Notifications.route) { NotificationsScreen() }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController = navController) }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
-            composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen() }
+            composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen(navController) }
             composable(AppRoutes.StudentHome.route) { StudentHomeScreen(navController = navController) }
             // Ruta Ubicación del colegio
             composable(AppRoutes.Ubicacion.route) { UbicacionScreen() }
