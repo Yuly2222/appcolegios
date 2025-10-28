@@ -13,11 +13,21 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
 import com.example.appcolegios.demo.DemoData
+import com.example.appcolegios.data.UserPreferencesRepository
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.NavController
+import android.content.Intent
+import com.example.appcolegios.auth.RegisterActivity
 
 @Composable
-fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel()) {
+fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navController: NavController? = null) {
     val studentResult by profileViewModel.student.collectAsState(initial = null)
     val isDemo = DemoData.isDemoUser()
+
+    val context = LocalContext.current
+    val userPrefs = UserPreferencesRepository(context)
+    val userDataState = userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null)).value
+    val isAdmin = (userDataState.role ?: "").equals("ADMIN", ignoreCase = true)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -30,44 +40,81 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel()) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            when (val result = studentResult) {
-                null -> {
-                    if (isDemo) {
-                        StudentCard(student = DemoData.demoStudent())
-                    } else {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                else -> {
-                    result.onSuccess { student ->
-                        val data = student ?: if (isDemo) DemoData.demoStudent() else null
-                        if (data != null) {
-                            StudentCard(student = data)
-                        } else {
-                            Text(
-                                text = stringResource(R.string.no_student_data),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }.onFailure { e ->
+            if (isAdmin) {
+                // Vista simplificada para administradores
+                AdminCard(onOpenAdmin = {
+                    navController?.navigate(com.example.appcolegios.navigation.AppRoutes.Admin.route)
+                }, onCreateUser = {
+                    val intent = Intent(context, RegisterActivity::class.java)
+                    intent.putExtra("fromAdmin", true)
+                    context.startActivity(intent)
+                })
+            } else {
+                when (val result = studentResult) {
+                    null -> {
                         if (isDemo) {
                             StudentCard(student = DemoData.demoStudent())
                         } else {
-                            Card(
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                                ),
-                                shape = MaterialTheme.shapes.small
-                            ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                    else -> {
+                        result.onSuccess { student ->
+                            val data = student ?: if (isDemo) DemoData.demoStudent() else null
+                            if (data != null) {
+                                StudentCard(student = data)
+                            } else {
                                 Text(
-                                    text = stringResource(R.string.error_label) + ": " + (e.message ?: ""),
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.padding(16.dp)
+                                    text = stringResource(R.string.no_student_data),
+                                    color = MaterialTheme.colorScheme.onBackground
                                 )
+                            }
+                        }.onFailure { e ->
+                            if (isDemo) {
+                                StudentCard(student = DemoData.demoStudent())
+                            } else {
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                                    ),
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.error_label) + ": " + (e.message ?: ""),
+                                        color = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdminCard(onOpenAdmin: () -> Unit, onCreateUser: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(
+                text = "Panel de Administración",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(text = "Acciones disponibles para administradores:")
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(onClick = onOpenAdmin) { Text("Abrir Panel Admin") }
+                Button(onClick = onCreateUser) { Text("Crear usuario") }
             }
         }
     }

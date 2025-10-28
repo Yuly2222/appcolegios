@@ -13,18 +13,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.EventNote
-import androidx.compose.material.icons.automirrored.filled.Assignment
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.EventNote
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,7 +68,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
-import com.google.firebase.auth.FirebaseAuth
 import android.widget.Toast
 import com.example.appcolegios.teacher.TeacherHomeScreen
 import com.example.appcolegios.student.StudentHomeScreen
@@ -105,12 +104,24 @@ fun AppNavigation(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    val bottomItems = listOf(
-        BottomItem(stringResource(R.string.home), AppRoutes.Home.route, Icons.Filled.Home),
-        BottomItem(stringResource(R.string.messages), AppRoutes.Messages.route, Icons.AutoMirrored.Filled.Message),
-        BottomItem(stringResource(R.string.notifications), AppRoutes.Notifications.route, Icons.Filled.Notifications),
-        BottomItem(stringResource(R.string.profile), AppRoutes.Profile.route, Icons.Filled.Person)
-    )
+    val context = LocalContext.current
+    val userPrefs = UserPreferencesRepository(context)
+    val userData = userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null)).value
+    val isAdmin = (userData.role ?: "").equals("ADMIN", ignoreCase = true)
+
+    val bottomItems = if (isAdmin) {
+        listOf(
+            BottomItem("Admin", AppRoutes.Admin.route, Icons.Filled.Dashboard),
+            BottomItem(stringResource(R.string.profile), AppRoutes.Profile.route, Icons.Filled.Person)
+        )
+    } else {
+        listOf(
+            BottomItem(stringResource(R.string.home), AppRoutes.Home.route, Icons.Filled.Home),
+            BottomItem(stringResource(R.string.messages), AppRoutes.Messages.route, Icons.AutoMirrored.Filled.Message),
+            BottomItem(stringResource(R.string.notifications), AppRoutes.Notifications.route, Icons.Filled.Notifications),
+            BottomItem(stringResource(R.string.profile), AppRoutes.Profile.route, Icons.Filled.Person)
+        )
+    }
 
     // Badges en tiempo real desde Firestore
     val badgesVm: BadgesViewModel = viewModel()
@@ -118,11 +129,6 @@ fun AppNavigation(
 
     val notifCount = if (badgesState.unreadNotifications > 0) badgesState.unreadNotifications else unreadNotificationsCount
     val msgCount = if (badgesState.unreadMessages > 0) badgesState.unreadMessages else unreadMessagesCount
-
-    val context = LocalContext.current
-    val userPrefs = UserPreferencesRepository(context)
-    val userData = userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null)).value
-    val isAdmin = (userData.role ?: "").equals("ADMIN", ignoreCase = true)
 
     val content: @Composable () -> Unit = {
         NavHost(navController = navController, startDestination = startDestination) {
@@ -181,7 +187,7 @@ fun AppNavigation(
             composable(AppRoutes.Notifications.route) { NotificationsScreen() }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
-            composable(AppRoutes.Admin.route) { AdminScreen(navController = navController) }
+            composable(AppRoutes.Admin.route) { AdminScreen() }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
             composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen(navController) }
             composable(AppRoutes.StudentHome.route) { StudentHomeScreen(navController = navController) }
@@ -222,14 +228,166 @@ fun AppNavigation(
                     )
                     HorizontalDivider()
 
-                    // Opción Home
+                    // Opción Home / Admin
+                    if (isAdmin) {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.Dashboard, contentDescription = null) },
+                            label = { Text("Panel Admin") },
+                            selected = currentDestination?.route == AppRoutes.Admin.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Admin.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    } else {
+                        // Opción Home para usuarios no-admin (restaurada: menú completo)
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                            label = { Text(stringResource(R.string.home)) },
+                            selected = currentDestination?.route == AppRoutes.Home.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Home.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Mensajes
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = null) },
+                            label = { Text(stringResource(R.string.messages)) },
+                            selected = currentDestination?.route == AppRoutes.Messages.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Messages.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Notificaciones
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.Notifications, contentDescription = null) },
+                            label = { Text(stringResource(R.string.notifications)) },
+                            selected = currentDestination?.route == AppRoutes.Notifications.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Notifications.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Pagos
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.CreditCard, contentDescription = null) },
+                            label = { Text(stringResource(R.string.payments)) },
+                            selected = currentDestination?.route == AppRoutes.Payments.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Payments.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Transporte
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.DirectionsBus, contentDescription = null) },
+                            label = { Text(stringResource(R.string.transporte)) },
+                            selected = currentDestination?.route == AppRoutes.Transport.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Transport.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Notas
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.School, contentDescription = null) },
+                            label = { Text(stringResource(R.string.notes)) },
+                            selected = currentDestination?.route == AppRoutes.Notes.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Notes.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Asistencia
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null) },
+                            label = { Text(stringResource(R.string.attendance)) },
+                            selected = currentDestination?.route == AppRoutes.Attendance.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Attendance.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Tareas
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.EventNote, contentDescription = null) },
+                            label = { Text(stringResource(R.string.tasks)) },
+                            selected = currentDestination?.route == AppRoutes.Tasks.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Tasks.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+
+                        // Calendario
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.CalendarToday, contentDescription = null) },
+                            label = { Text(stringResource(R.string.calendar)) },
+                            selected = currentDestination?.route == AppRoutes.Calendar.route,
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                                navController.navigate(AppRoutes.Calendar.route) {
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp)
+                        )
+                    }
+
+                    // Opciones comunes: Perfil y Cerrar sesión
                     NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.Home, contentDescription = null) },
-                        label = { Text(stringResource(R.string.home)) },
-                        selected = currentDestination?.route == AppRoutes.Home.route,
+                        icon = { Icon(Icons.Filled.Person, contentDescription = null) },
+                        label = { Text(stringResource(R.string.profile)) },
+                        selected = currentDestination?.route == AppRoutes.Profile.route,
                         onClick = {
                             scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Home.route) {
+                            navController.navigate(AppRoutes.Profile.route) {
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -237,142 +395,19 @@ fun AppNavigation(
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
 
-                    // Opción Perfil
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.Person, contentDescription = null) },
-                        label = { Text(stringResource(R.string.profile)) },
-                        selected = currentDestination?.route == AppRoutes.Profile.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Profile.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Pagos
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.CreditCard, contentDescription = null) },
-                        label = { Text(stringResource(R.string.payments)) },
-                        selected = currentDestination?.route == AppRoutes.Payments.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Payments.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Transporte
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.DirectionsBus, contentDescription = null) },
-                        label = { Text(stringResource(R.string.transporte)) },
-                        selected = currentDestination?.route == AppRoutes.Transport.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Transport.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Notas
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.School, contentDescription = null) },
-                        label = { Text(stringResource(R.string.notes)) },
-                        selected = currentDestination?.route == AppRoutes.Notes.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Notes.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Asistencia
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.EventNote, contentDescription = null) },
-                        label = { Text(stringResource(R.string.attendance)) },
-                        selected = currentDestination?.route == AppRoutes.Attendance.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Attendance.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Tareas
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = null) },
-                        label = { Text(stringResource(R.string.tasks)) },
-                        selected = currentDestination?.route == AppRoutes.Tasks.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Tasks.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Calendario
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.CalendarToday, contentDescription = null) },
-                        label = { Text(stringResource(R.string.calendar)) },
-                        selected = currentDestination?.route == AppRoutes.Calendar.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Calendar.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    // Opción Dashboard (solo admin)
-                    if (isAdmin) {
-                        NavigationDrawerItem(
-                            icon = { Icon(Icons.Filled.Dashboard, contentDescription = null) },
-                            label = { Text(stringResource(R.string.dashboard)) },
-                            selected = currentDestination?.route == AppRoutes.Dashboard.route,
-                            onClick = {
-                                scope.launch { drawerState.close() }
-                                navController.navigate(AppRoutes.Dashboard.route)
-                            },
-                            modifier = Modifier.padding(horizontal = 12.dp)
-                        )
-                    }
-
-                    // Insertar acceso a Ubicación del colegio antes del divider final
-                    NavigationDrawerItem(
-                        icon = { Icon(Icons.Filled.School, contentDescription = null) },
-                        label = { Text(stringResource(R.string.ubicacion_colegio)) },
-                        selected = currentDestination?.route == AppRoutes.Ubicacion.route,
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            navController.navigate(AppRoutes.Ubicacion.route)
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp)
-                    )
-
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-                    // Opción Cerrar Sesión
+                    // Logout
                     NavigationDrawerItem(
                         icon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null) },
-                        label = { Text("Cerrar Sesión") },
+                        label = { Text(stringResource(R.string.logout)) },
                         selected = false,
                         onClick = {
-                            scope.launch {
-                                drawerState.close()
-                                // Cerrar sesión en Firebase
-                                FirebaseAuth.getInstance().signOut()
-                                // Limpiar preferencias del usuario
-                                scope.launch {
-                                    userPrefs.clearUserData()
-                                }
-                                // Navegar al login
-                                navController.navigate(AppRoutes.Login.route) {
-                                    popUpTo(0) { inclusive = true }
-                                }
-                            }
+                            scope.launch { drawerState.close() }
+                            // lanzar actividad de login para cerrar sesión
+                            val activity = context as? Activity
+                            val intent = Intent(context, LoginActivity::class.java)
+                            context.startActivity(intent)
+                            activity?.finish()
                         },
-                        colors = NavigationDrawerItemDefaults.colors(
-                            unselectedTextColor = MaterialTheme.colorScheme.error,
-                            unselectedIconColor = MaterialTheme.colorScheme.error
-                        ),
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
                 }

@@ -13,6 +13,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appcolegios.R
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.android.material.button.MaterialButton
 import java.util.Locale
@@ -62,7 +65,7 @@ class RegisterActivity : AppCompatActivity() {
         if (fromAdmin) {
             // No ocultar los campos para que no parezcan "no funcionales".
             // Sólo avisamos con el hint de que la contraseña no se almacenará en este modo.
-            passwordInput.hint = "Opcional (no se guarda en modo admin)"
+            passwordInput.hint = "Opcional (si se deja vacío se encola para backend)"
             confirmInput.hint = "Opcional"
         }
 
@@ -87,31 +90,106 @@ class RegisterActivity : AppCompatActivity() {
             }
 
             if (fromAdmin) {
-                // Crear solo documento en Firestore, no tocar FirebaseAuth para no afectar la sesión actual
-                val data = mapOf(
-                    "name" to name,
-                    "email" to email,
-                    "document" to document,
-                    "phone" to phone,
-                    "role" to role,
-                    "createdAt" to com.google.firebase.Timestamp.now()
-                )
-                val coll = when (role) {
-                    "PADRE" -> "parents"
-                    "DOCENTE" -> "teachers"
-                    "ADMIN" -> "admins"
-                    else -> "students"
+                // Intentamos crear la cuenta en Firebase Auth usando una FirebaseApp secundaria
+                // para no afectar la sesión del admin.
+                try {
+                    val opts = FirebaseOptions.fromResource(this)
+                    val importerApp = if (opts != null) {
+                        try {
+                            FirebaseApp.getInstance("importer")
+                        } catch (_: IllegalStateException) {
+                            FirebaseApp.initializeApp(this, opts, "importer")
+                        }
+                    } else {
+                        null
+                    }
+
+                    val authImporter = if (importerApp != null) FirebaseAuth.getInstance(importerApp) else FirebaseAuth.getInstance()
+
+                    if (password.isNotEmpty()) {
+                        // Crear usuario en Auth (en la app importadora si fue posible)
+                        authImporter.createUserWithEmailAndPassword(email, password)
+                            .addOnSuccessListener { result ->
+                                val uid = result.user?.uid
+                                val data = mapOf(
+                                    "name" to name,
+                                    "email" to email,
+                                    "document" to document,
+                                    "phone" to phone,
+                                    "role" to role,
+                                    "createdAt" to com.google.firebase.Timestamp.now()
+                                )
+                                val coll = when (role) {
+                                    "PADRE" -> "parents"
+                                    "DOCENTE" -> "teachers"
+                                    "ADMIN" -> "admins"
+                                    else -> "students"
+                                }
+                                // Guardar documento asociado
+                                db.collection(coll).document(uid ?: db.collection(coll).document().id)
+                                    .set(data)
+                                    .addOnSuccessListener {
+                                        // Enviar verificación desde authImporter (no afecta admin)
+                                        try {
+                                            authImporter.currentUser?.sendEmailVerification()
+                                        } catch (_: Exception) {}
+
+                                        // Cerrar sesión en importer para limpiar
+                                        try { authImporter.signOut() } catch (_: Exception) {}
+
+                                        Toast.makeText(this, "Usuario creado correctamente (Auth + Firestore)", Toast.LENGTH_LONG).show()
+                                        finish()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(this, "Error guardando documento: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                    }
+                            }
+                            .addOnFailureListener { e ->
+                                if (e is FirebaseAuthUserCollisionException) {
+                                    Toast.makeText(this, "El correo ya está registrado.", Toast.LENGTH_LONG).show()
+                                } else {
+                                    Toast.makeText(this, "Error creando usuario en Auth: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                    } else {
+                        // Si no se especifica contraseña, encolamos la petición para backend (auth_queue)
+                        val queueData = mapOf(
+                            "email" to email,
+                            "role" to role,
+                            "displayName" to name,
+                            "requestedAt" to com.google.firebase.Timestamp.now()
+                        )
+                        val coll = when (role) {
+                            "PADRE" -> "parents"
+                            "DOCENTE" -> "teachers"
+                            "ADMIN" -> "admins"
+                            else -> "students"
+                        }
+                        db.collection(coll).add(mapOf(
+                            "name" to name,
+                            "email" to email,
+                            "document" to document,
+                            "phone" to phone,
+                            "role" to role,
+                            "createdAt" to com.google.firebase.Timestamp.now()
+                        )).addOnSuccessListener {
+                            db.collection("auth_queue").add(queueData)
+                                .addOnSuccessListener {
+                                    Toast.makeText(this, "Usuario creado en Firestore y encolado para Auth (backend)", Toast.LENGTH_LONG).show()
+                                    finish()
+                                }
+                                .addOnFailureListener { e ->
+                                    Toast.makeText(this, "Error encolando para Auth: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                }
+                        }.addOnFailureListener { e ->
+                            Toast.makeText(this, "Error guardando documento: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        }
+                    }
+
+                } catch (e: Exception) {
+                    Toast.makeText(this, "Error inicializando importador Auth: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                 }
-                db.collection(coll)
-                    .add(data)
-                    .addOnSuccessListener {
-                        Toast.makeText(this, "Usuario creado correctamente", Toast.LENGTH_LONG).show()
-                        // Volver a la pantalla anterior (Admin)
-                        finish()
-                    }
-                    .addOnFailureListener { e ->
-                        Toast.makeText(this, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                    }
+
             } else {
                 // Flujo normal: registrar en FirebaseAuth y crear documento en Firestore luego cerrar sesión y volver al login
                 auth.createUserWithEmailAndPassword(email, password)

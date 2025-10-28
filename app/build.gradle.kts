@@ -101,6 +101,9 @@ dependencies {
     implementation(libs.play.services.location)
     implementation(libs.firebase.database)
 
+    // Apache POI para leer archivos Excel (.xlsx)
+    implementation("org.apache.poi:poi-ooxml:5.2.3")
+
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)

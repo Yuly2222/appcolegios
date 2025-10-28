@@ -152,4 +152,28 @@
     <string name="events_error_permission">No tienes permisos para ver estos eventos. Inicia sesión con la cuenta correcta o contacta al administrador.</string>
     <string name="action_login">Iniciar sesión</string>
     <string name="events_item_format">%1$s • %2$s</string>
+
+    <!-- Nuevos strings para activity_profile.xml -->
+    <string name="curso_y_grupo">Curso y Grupo:</string>
+    <string name="sample_course_group">10° - Grupo A</string>
+    <string name="numero_lista">Nº de lista:</string>
+    <string name="sample_list_number">15</string>
+    <string name="fecha_nacimiento_label">Fecha de nacimiento:</string>
+    <string name="sample_birthdate">01/01/2008</string>
+    <string name="grupo_sanguineo_label">Grupo sanguíneo:</string>
+    <string name="sample_blood_type">O+</string>
+    <string name="correo_institucional_full">Correo institucional:</string>
+    <string name="sample_email">estudiante@colegio.edu.co</string>
+    <string name="acudiente_label">Acudiente(s):</string>
+    <string name="sample_guardian">Nombre del Acudiente</string>
+    <string name="telefono_label">Teléfono:</string>
+    <string name="sample_phone">300 123 4567</string>
+    <string name="direccion_label">Dirección:</string>
+    <string name="sample_address">Calle 123 #45-67</string>
+    <string name="eps_full">EPS:</string>
+    <string name="sample_eps">EPS Salud</string>
+    <string name="estado_matricula_full">Estado de matrícula:</string>
+    <string name="sample_enrollment_status">Activo</string>
+    <string name="promedio_label">Promedio:</string>
+    <string name="sample_average">4.5</string>
 </resources>

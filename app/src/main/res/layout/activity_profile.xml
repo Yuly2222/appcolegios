@@ -14,6 +14,7 @@
 
         <!-- Card con información del estudiante -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/academicCard"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardBackgroundColor="@color/surface"
@@ -34,7 +35,7 @@
                     android:layout_height="100dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_launcher_foreground"
-                    android:contentDescription="Foto de perfil"
+                    android:contentDescription="@string/foto_perfil_cd"
                     android:layout_marginBottom="16dp" />
 
                 <!-- Nombre -->
@@ -42,7 +43,7 @@
                     android:id="@+id/nameText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Nombre del Estudiante"
+                    android:text="@string/app_name"
                     android:textSize="22sp"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface"
@@ -59,7 +60,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Curso y Grupo:"
+                    android:text="@string/curso_y_grupo"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -68,7 +69,7 @@
                     android:id="@+id/courseText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="10° - Grupo A"
+                    android:text="@string/sample_course_group"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -76,7 +77,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Nº de lista:"
+                    android:text="@string/numero_lista"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -85,7 +86,7 @@
                     android:id="@+id/listNumberText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="15"
+                    android:text="@string/sample_list_number"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -93,7 +94,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Fecha de nacimiento:"
+                    android:text="@string/fecha_nacimiento_label"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -102,7 +103,7 @@
                     android:id="@+id/birthdateText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="01/01/2008"
+                    android:text="@string/sample_birthdate"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -110,7 +111,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Grupo sanguíneo:"
+                    android:text="@string/grupo_sanguineo_label"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -119,7 +120,7 @@
                     android:id="@+id/bloodTypeText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="O+"
+                    android:text="@string/sample_blood_type"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -127,7 +128,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Correo institucional:"
+                    android:text="@string/correo_institucional_full"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -136,7 +137,7 @@
                     android:id="@+id/emailText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="estudiante@colegio.edu.co"
+                    android:text="@string/sample_email"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -144,7 +145,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Acudiente(s):"
+                    android:text="@string/acudiente_label"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -153,7 +154,7 @@
                     android:id="@+id/guardianText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Nombre del Acudiente"
+                    android:text="@string/sample_guardian"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -161,7 +162,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Teléfono:"
+                    android:text="@string/telefono_label"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -170,7 +171,7 @@
                     android:id="@+id/phoneText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="300 123 4567"
+                    android:text="@string/sample_phone"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -178,7 +179,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Dirección:"
+                    android:text="@string/direccion_label"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -187,7 +188,7 @@
                     android:id="@+id/addressText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Calle 123 #45-67"
+                    android:text="@string/sample_address"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -195,7 +196,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="EPS:"
+                    android:text="@string/eps_full"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -204,7 +205,7 @@
                     android:id="@+id/epsText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="EPS Salud"
+                    android:text="@string/sample_eps"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -212,7 +213,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Estado de matrícula:"
+                    android:text="@string/estado_matricula_full"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -221,7 +222,7 @@
                     android:id="@+id/enrollmentStatusText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Activo"
+                    android:text="@string/sample_enrollment_status"
                     android:textColor="@color/on_surface"
                     android:textSize="16sp"
                     android:layout_marginBottom="12dp" />
@@ -229,7 +230,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Promedio:"
+                    android:text="@string/promedio_label"
                     android:textStyle="bold"
                     android:textColor="@color/on_surface_variant"
                     android:textSize="14sp" />
@@ -238,7 +239,7 @@
                     android:id="@+id/averageText"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="4.5"
+                    android:text="@string/sample_average"
                     android:textColor="@color/primary"
                     android:textSize="20sp"
                     android:textStyle="bold"
@@ -252,7 +253,7 @@
             android:id="@+id/academicInfoButton"
             android:layout_width="match_parent"
             android:layout_height="60dp"
-            android:text="Mi información académica"
+            android:text="@string/my_academic_information"
             android:textSize="16sp"
             app:backgroundTint="@color/primary"
             app:cornerRadius="12dp"

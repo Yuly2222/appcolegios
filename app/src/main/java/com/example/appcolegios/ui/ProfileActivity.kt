@@ -14,6 +14,10 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import java.text.SimpleDateFormat
 import java.util.*
+import com.example.appcolegios.data.UserPreferencesRepository
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 class ProfileActivity : AppCompatActivity() {
 
@@ -45,6 +49,28 @@ class ProfileActivity : AppCompatActivity() {
         auth = FirebaseAuth.getInstance()
 
         initViews()
+        // Antes de cargar datos académicos, comprobamos el rol para ocultar la sección si es ADMIN
+        lifecycleScope.launch {
+            val repo = UserPreferencesRepository(applicationContext)
+            var roleString: String? = null
+            try {
+                val userData = repo.userData.first()
+                roleString = userData.role
+            } catch (_: Exception) { }
+
+            val isAdmin = (roleString ?: "ADMIN").equals("ADMIN", ignoreCase = true)
+            runOnUiThread {
+                val academicCard = findViewById<View?>(R.id.academicCard)
+                if (isAdmin) {
+                    academicCard?.visibility = View.GONE
+                    academicInfoButton.visibility = View.GONE
+                } else {
+                    academicCard?.visibility = View.VISIBLE
+                    academicInfoButton.visibility = View.VISIBLE
+                }
+            }
+        }
+
         loadStudentData()
     }
 

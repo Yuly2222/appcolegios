@@ -21,12 +21,15 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.data.model.Role
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
-import androidx.navigation.NavController
-import com.example.appcolegios.navigation.AppRoutes
 import com.example.appcolegios.auth.RegisterActivity
+import org.apache.poi.ss.usermodel.WorkbookFactory
+import java.io.BufferedInputStream
+import com.google.firebase.FirebaseApp
+import com.google.firebase.FirebaseOptions
+import com.google.firebase.auth.FirebaseAuth
 
 @Composable
-fun AdminScreen(navController: NavController) {
+fun AdminScreen() {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
     val userData = userPrefs.userData.collectAsState(initial = UserData(null, null, null)).value
@@ -54,45 +57,190 @@ fun AdminScreen(navController: NavController) {
                 try {
                     context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 } catch (_: Exception) {}
+
+                // Intentar inicializar FirebaseApp secundaria (importer) si existe google-services
+                var authImporter: FirebaseAuth? = null
                 try {
-                    val input = context.contentResolver.openInputStream(uri)
-                    val reader = BufferedReader(InputStreamReader(input))
-                    var line: String?
+                    val opts = FirebaseOptions.fromResource(context)
+                    val importerApp = if (opts != null) {
+                        try { FirebaseApp.getInstance("importer") } catch (_: IllegalStateException) { FirebaseApp.initializeApp(context, opts, "importer") }
+                    } else null
+                    authImporter = if (importerApp != null) FirebaseAuth.getInstance(importerApp) else null
+                } catch (_: Exception) { authImporter = null }
+
+                try {
+                    // Detectar por extensión si es CSV o XLSX
+                    val name = uri.lastPathSegment ?: ""
+                    val isXlsx = name.endsWith(".xlsx", ignoreCase = true) || name.endsWith(".xls", ignoreCase = true)
                     var count = 0
-                    // Descartar encabezado si existe
-                    reader.readLine()
-                    while (true) {
-                        line = reader.readLine() ?: break
-                        val parts = line.split(',')
-                        if (parts.size >= 3) {
-                            val type = parts[0].trim().lowercase()
-                            val email = parts[1].trim()
-                            val name = parts[2].trim()
-                            val parsedRole = when (parts.getOrNull(3)?.trim()?.uppercase()) {
-                                "PADRE" -> "PADRE"
-                                "DOCENTE" -> "DOCENTE"
-                                "ADMIN" -> "ADMIN"
-                                else -> "ESTUDIANTE"
+                    if (isXlsx) {
+                        // Leer con Apache POI
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            BufferedInputStream(input).use { bis ->
+                                val wb = WorkbookFactory.create(bis)
+                                val sheet = wb.getSheetAt(0)
+                                for (r in 1..sheet.lastRowNum) {
+                                    val row = sheet.getRow(r) ?: continue
+                                    // Soportar dos formatos:
+                                    // Formato completo (9 cols): 0 nombre,1 apellidos,2 tipoDoc,3 numeroDoc,4 celular,5 direccion,6 email,7 pass,8 rol
+                                    // Formato compacto (>=5 cols): 0 nombre,1 apellidos,2 tipo,3 email,4 role
+                                    val cellCount = row.lastCellNum?.toInt() ?: 0
+                                    var nombre = ""
+                                    var apellidos = ""
+                                    var tipo = ""
+                                    var email = ""
+                                    var pass: String? = null
+                                    var rol = "ESTUDIANTE"
+
+                                    if (cellCount >= 9) {
+                                        nombre = row.getCell(0)?.toString()?.trim() ?: ""
+                                        apellidos = row.getCell(1)?.toString()?.trim() ?: ""
+                                        tipo = row.getCell(2)?.toString()?.trim() ?: ""
+                                        // salto campos intermedios
+                                        email = row.getCell(6)?.toString()?.trim() ?: ""
+                                        pass = row.getCell(7)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                                        val rawRol = row.getCell(8)?.toString()?.trim()
+                                        rol = if (rawRol.isNullOrBlank()) "ESTUDIANTE" else rawRol
+                                    } else if (cellCount >= 5) {
+                                        nombre = row.getCell(0)?.toString()?.trim() ?: ""
+                                        apellidos = row.getCell(1)?.toString()?.trim() ?: ""
+                                        tipo = row.getCell(2)?.toString()?.trim() ?: ""
+                                        email = row.getCell(3)?.toString()?.trim() ?: ""
+                                        rol = row.getCell(4)?.toString()?.trim() ?: "ESTUDIANTE"
+                                        // si hay columna 5 posible password
+                                        if (cellCount > 5) pass = row.getCell(5)?.toString()?.trim()?.takeIf { it.isNotBlank() }
+                                    } else {
+                                        // intentar una heuristica: buscar el primer email-like cell
+                                        for (c in 0 until cellCount) {
+                                            val v = row.getCell(c)?.toString()?.trim() ?: ""
+                                            if (v.contains("@")) { email = v; break }
+                                        }
+                                        nombre = row.getCell(0)?.toString()?.trim() ?: ""
+                                    }
+
+                                    if (email.isBlank() || nombre.isBlank()) continue
+
+                                    val roleParsed = when (rol.uppercase()) {
+                                        "PADRE", "PARENT" -> "PADRE"
+                                        "DOCENTE", "TEACHER" -> "DOCENTE"
+                                        "ADMIN", "ADMINISTRADOR" -> "ADMIN"
+                                        else -> "ESTUDIANTE"
+                                    }
+
+                                    val coll = when (roleParsed) {
+                                        "PADRE" -> "parents"
+                                        "DOCENTE" -> "teachers"
+                                        "ADMIN" -> "admins"
+                                        else -> "students"
+                                    }
+
+                                    try {
+                                        if (pass != null && authImporter != null) {
+                                            // Crear en Auth y guardar con UID
+                                            val res = authImporter.createUserWithEmailAndPassword(email, pass).await()
+                                            val uid = res.user?.uid ?: db.collection(coll).document().id
+                                            val data = hashMapOf(
+                                                "nombres" to nombre,
+                                                "apellidos" to apellidos,
+                                                "email" to email,
+                                                "tipo" to tipo,
+                                                "role" to roleParsed,
+                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                            )
+                                            db.collection(coll).document(uid).set(data).await()
+                                            // enviar verificacion
+                                            try { authImporter.currentUser?.sendEmailVerification() } catch (_: Exception) {}
+                                        } else {
+                                            // Guardar doc y encolar petición para backend
+                                            val data = hashMapOf(
+                                                "nombres" to nombre,
+                                                "apellidos" to apellidos,
+                                                "email" to email,
+                                                "tipo" to tipo,
+                                                "role" to roleParsed,
+                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                            )
+                                            db.collection(coll).add(data).await()
+                                            db.collection("auth_queue").add(hashMapOf(
+                                                "email" to email,
+                                                "role" to roleParsed,
+                                                "displayName" to ("$nombre $apellidos").trim(),
+                                                "requestedAt" to com.google.firebase.Timestamp.now()
+                                            )).await()
+                                        }
+                                        count++
+                                    } catch (e: Exception) {
+                                        // registrar error y continuar
+                                    }
+                                }
+                                wb.close()
                             }
-                            val data = hashMapOf(
-                                "email" to email,
-                                "name" to name,
-                                "role" to parsedRole,
-                                "type" to type,
-                                "importedAt" to com.google.firebase.Timestamp.now()
-                            )
-                            val coll = when (parsedRole) {
-                                "PADRE" -> "parents"
-                                "DOCENTE" -> "teachers"
-                                "ADMIN" -> "admins"
-                                else -> "students"
+                        }
+                    } else {
+                        // CSV (mantener comportamiento anterior, con intento de creación si hay password column)
+                        context.contentResolver.openInputStream(uri)?.use { input ->
+                            val reader = BufferedReader(InputStreamReader(input))
+                            reader.readLine() // descartar encabezado
+                            var line: String?
+                            var localCount = 0
+                            while (true) {
+                                line = reader.readLine() ?: break
+                                val parts = line.split(',')
+                                if (parts.size >= 3) {
+                                    val type = parts[0].trim().lowercase()
+                                    val email = parts[1].trim()
+                                    val name = parts[2].trim()
+                                    val parsedRole = when (parts.getOrNull(3)?.trim()?.uppercase()) {
+                                        "PADRE" -> "PADRE"
+                                        "DOCENTE" -> "DOCENTE"
+                                        "ADMIN" -> "ADMIN"
+                                        else -> "ESTUDIANTE"
+                                    }
+                                    val maybePass = parts.getOrNull(4)?.trim()?.takeIf { it.isNotBlank() }
+                                    val coll = when (parsedRole) {
+                                        "PADRE" -> "parents"
+                                        "DOCENTE" -> "teachers"
+                                        "ADMIN" -> "admins"
+                                        else -> "students"
+                                    }
+
+                                    try {
+                                        if (maybePass != null && authImporter != null) {
+                                            val res = authImporter.createUserWithEmailAndPassword(email, maybePass).await()
+                                            val uid = res.user?.uid ?: db.collection(coll).document().id
+                                            db.collection(coll).document(uid).set(hashMapOf(
+                                                "name" to name,
+                                                "email" to email,
+                                                "role" to parsedRole,
+                                                "type" to type,
+                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                            )).await()
+                                        } else {
+                                            db.collection(coll).add(hashMapOf(
+                                                "email" to email,
+                                                "name" to name,
+                                                "role" to parsedRole,
+                                                "type" to type,
+                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                            )).await()
+                                            db.collection("auth_queue").add(hashMapOf(
+                                                "email" to email,
+                                                "role" to parsedRole,
+                                                "displayName" to name,
+                                                "requestedAt" to com.google.firebase.Timestamp.now()
+                                            )).await()
+                                        }
+                                        localCount++
+                                    } catch (e: Exception) {
+                                        // continuar
+                                    }
+                                }
                             }
-                            db.collection(coll).add(data).await()
-                            count++
+                            count = localCount
                         }
                     }
-                    reader.close()
-                    status = "Se importaron $count registros correctamente. Nota: la creación de cuentas de autenticación masiva requiere backend (Admin SDK)."
+
+                    status = "Se importaron $count registros correctamente."
                 } catch (e: Exception) {
                     status = "Error importando: ${e.message}"
                 } finally {
@@ -186,7 +334,7 @@ fun AdminScreen(navController: NavController) {
                             status = null
                             try {
                                 com.example.appcolegios.data.TestDataInitializer.initializeAllTestData()
-                                status = "�� Datos de prueba inicializados correctamente"
+                                status = "✅ Datos de prueba inicializados correctamente"
                             } catch (e: Exception) {
                                 status = "❌ Error: ${e.message}"
                             } finally {
@@ -202,13 +350,13 @@ fun AdminScreen(navController: NavController) {
             }
         }
 
-        // Botón para importar desde CSV
+        // Botón para importar desde CSV/XLSX
         Button(
-            onClick = { filePicker.launch(arrayOf("text/*", "text/csv", "text/comma-separated-values")) },
+            onClick = { filePicker.launch(arrayOf("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/*","text/csv","text/comma-separated-values")) },
             enabled = !isLoading,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Importar desde CSV")
+            Text("Importar desde CSV / Excel (.xlsx)")
         }
 
         Text(
