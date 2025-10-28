@@ -45,9 +45,9 @@ fun HomeScreen(navController: NavController) {
             // Mostrar pantalla específica según el rol
             when (ui.role) {
                 Role.ADMIN -> HomeContent(ui = ui, onNavigate = { route -> navController.navigate(route) })
-                Role.DOCENTE -> TeacherHomeScreen(navController)
+                Role.DOCENTE -> TeacherHomeScreen(navController, ui.name)
                 Role.PADRE -> ParentHomeScreen()
-                Role.ESTUDIANTE -> StudentHomeScreen(navController) // Los estudiantes ven un inicio separado similar al de profesores
+                Role.ESTUDIANTE -> StudentHomeScreen(navController, ui.name) // Los estudiantes ven un inicio separado similar al de profesores
                 else -> HomeContent(ui = ui, onNavigate = { route -> navController.navigate(route) })
             }
         }
