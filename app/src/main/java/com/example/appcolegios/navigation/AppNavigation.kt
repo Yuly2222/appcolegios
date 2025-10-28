@@ -184,6 +184,8 @@ fun AppNavigation(
             composable(AppRoutes.Attendance.route) { AttendanceScreen() }
             composable(AppRoutes.Announcements.route) { AnnouncementsScreen(navController) }
             composable(AppRoutes.Tasks.route) { TasksScreen() }
+            // Ruta para calificar (Cursos -> Estudiantes -> Notas)
+            composable(AppRoutes.Grading.route) { com.example.appcolegios.academico.GradingScreen() }
             composable(AppRoutes.Notifications.route) { NotificationsScreen() }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }

@@ -391,14 +391,15 @@ fun TasksScreen() {
             title = { Text("Subiendo adjuntos") },
             text = {
                 Column {
-                    LinearProgressIndicator(progress = { uploadProgress / 100f })
-                    Spacer(Modifier.height(8.dp))
-                    Text("$uploadProgress%")
-                }
-            },
-            confirmButton = {}
-        )
-    }
+                    // LinearProgressIndicator expects a Float progress, not a lambda
+                    LinearProgressIndicator(progress = uploadProgress / 100f)
+                     Spacer(Modifier.height(8.dp))
+                     Text("$uploadProgress%")
+                 }
+             },
+             confirmButton = {}
+         )
+     }
 
     if (failedUploads.isNotEmpty()) {
         AlertDialog(

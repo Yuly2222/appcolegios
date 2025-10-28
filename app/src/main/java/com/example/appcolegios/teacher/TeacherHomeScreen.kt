@@ -190,7 +190,7 @@ private fun QuickActionsCard(navController: NavController) {
                 QuickActionButton(
                     icon = Icons.Filled.Grade,
                     label = "Calificar",
-                    onClick = { /* Navegar a calificaciones */ }
+                    onClick = { navController.navigate(com.example.appcolegios.navigation.AppRoutes.Grading.route) }
                 )
 
                 QuickActionButton(
