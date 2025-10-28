@@ -22,6 +22,7 @@ sealed class AppRoutes(val route: String) {
     object TeacherHome : AppRoutes("teacher_home")
     object Grading : AppRoutes("grading")
     object StudentHome : AppRoutes("student_home")
+    object VerifyEmail : AppRoutes("verify_email")
     object Chat : AppRoutes("chat/{otherUserId}")
     object NewMessage : AppRoutes("new_message")
     object Ubicacion : AppRoutes("ubicacion")

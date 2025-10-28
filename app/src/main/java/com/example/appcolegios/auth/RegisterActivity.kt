@@ -134,6 +134,17 @@ class RegisterActivity : AppCompatActivity() {
                                             authImporter.currentUser?.sendEmailVerification()
                                         } catch (_: Exception) {}
 
+                                        // Crear también documento en 'users' para que la app reconozca el rol y email
+                                        try {
+                                            val userMap = mapOf(
+                                                "displayName" to name,
+                                                "email" to email,
+                                                "role" to role
+                                            )
+                                            db.collection("users").document(uid ?: db.collection("users").document().id)
+                                                .set(userMap)
+                                        } catch (_: Exception) {}
+
                                         // Cerrar sesión en importer para limpiar
                                         try { authImporter.signOut() } catch (_: Exception) {}
 
@@ -175,6 +186,17 @@ class RegisterActivity : AppCompatActivity() {
                         )).addOnSuccessListener {
                             db.collection("auth_queue").add(queueData)
                                 .addOnSuccessListener {
+                                    // Crear también doc en 'users' para que la app conozca el correo/rol
+                                    try {
+                                        val userMap = mapOf(
+                                            "displayName" to name,
+                                            "email" to email,
+                                            "role" to role,
+                                            "importedAt" to com.google.firebase.Timestamp.now()
+                                        )
+                                        db.collection("users").add(userMap)
+                                    } catch (_: Exception) {}
+
                                     Toast.makeText(this, "Usuario creado en Firestore y encolado para Auth (backend)", Toast.LENGTH_LONG).show()
                                     finish()
                                 }

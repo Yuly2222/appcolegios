@@ -69,6 +69,7 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import android.widget.Toast
+import com.example.appcolegios.auth.VerifyEmailScreen
 import com.example.appcolegios.teacher.TeacherHomeScreen
 import com.example.appcolegios.student.StudentHomeScreen
 
@@ -148,9 +149,9 @@ fun AppNavigation(
             composable(AppRoutes.Register.route) {
                 RegisterScreen(
                     onRegisterSuccess = {
-                        // Mostrar mensaje de éxito y volver al Home (limpiando la pila)
-                        Toast.makeText(context, "Registro exitoso", Toast.LENGTH_SHORT).show()
-                        navController.navigate(AppRoutes.Home.route) {
+                        // Mostrar mensaje de éxito y navegar a verificación de correo
+                        Toast.makeText(context, "Registro exitoso. Verifica tu correo.", Toast.LENGTH_SHORT).show()
+                        navController.navigate(AppRoutes.VerifyEmail.route) {
                             popUpTo(0) { inclusive = true }
                         }
                     },
@@ -162,6 +163,7 @@ fun AppNavigation(
                 RegisterScreen(
                     onRegisterSuccess = {
                         Toast.makeText(context, "Usuario creado correctamente", Toast.LENGTH_SHORT).show()
+                        // Al crear desde admin solo volver al home del admin
                         navController.navigate(AppRoutes.Home.route) {
                             popUpTo(0) { inclusive = true }
                         }
@@ -210,6 +212,12 @@ fun AppNavigation(
                     onBack = { navController.popBackStack() }
                 )
             }
+            composable(AppRoutes.VerifyEmail.route) { VerifyEmailScreen(onDone = {
+                // Volver al login/splash
+                navController.navigate(AppRoutes.Splash.route) {
+                    popUpTo(0) { inclusive = true }
+                }
+            }) }
         }
     }
 

@@ -13,6 +13,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import androidx.lifecycle.lifecycleScope
 import com.example.appcolegios.data.UserPreferencesRepository
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -34,55 +37,91 @@ class LoginActivity : AppCompatActivity() {
             if (email.isEmpty() || password.isEmpty()) {
                 Toast.makeText(this, "Ingresa email y contraseña", Toast.LENGTH_SHORT).show()
             } else {
-                auth.signInWithEmailAndPassword(email, password)
-                    .addOnSuccessListener {
-                        // Obtener rol desde Firestore y redirigir al startDestination apropiado
-                        val user = auth.currentUser
+                // Usar coroutines para control más sencillo y fallback
+                lifecycleScope.launch {
+                    try {
+                        val result = auth.signInWithEmailAndPassword(email, password).await()
+                        val user = result.user
                         if (user == null) {
-                            // Fallback
-                            val intent = Intent(this, com.example.appcolegios.MainActivity::class.java)
+                            val intent = Intent(this@LoginActivity, com.example.appcolegios.MainActivity::class.java)
                             intent.putExtra("startDestination", "home")
                             startActivity(intent)
                             finish()
-                            return@addOnSuccessListener
+                            return@launch
                         }
-                        firestore.collection("users").document(user.uid).get()
-                            .addOnSuccessListener { doc ->
-                                val role = doc.getString("role")?.uppercase() ?: "ADMIN"
-                                val displayName = doc.getString("displayName") ?: doc.getString("name") ?: ""
-                                // Guardar en preferencias para sesiones persistentes
-                                val userPrefs = UserPreferencesRepository(applicationContext)
-                                lifecycleScope.launch {
-                                    try {
-                                        userPrefs.updateUserData(user.uid, role, displayName)
-                                    } catch (_: Exception) {}
+
+                        // Verificar email
+                        if (!user.isEmailVerified) {
+                            auth.signOut()
+                            Toast.makeText(this@LoginActivity, "Por favor verifica tu correo antes de iniciar sesión.", Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+
+                        // Intentar obtener role y displayName desde 'users' y, si no está, desde colecciones específicas
+                        val usersDoc = firestore.collection("users").document(user.uid).get().await()
+                        var role = usersDoc.getString("role")?.uppercase() ?: ""
+                        var displayName = usersDoc.getString("displayName") ?: usersDoc.getString("name") ?: ""
+
+                        if (role.isBlank() || displayName.isBlank()) {
+                            val collections = listOf("students", "teachers", "parents", "admins")
+                            for (coll in collections) {
+                                val doc = firestore.collection(coll).document(user.uid).get().await()
+                                if (doc.exists()) {
+                                    role = doc.getString("role") ?: when (coll) {
+                                        "students" -> "ESTUDIANTE"
+                                        "teachers" -> "DOCENTE"
+                                        "parents" -> "PADRE"
+                                        "admins" -> "ADMIN"
+                                        else -> "ADMIN"
+                                    }
+                                    displayName = (doc.getString("nombres") ?: doc.getString("name")) ?: displayName
+                                    break
                                 }
-                                val startDestination = when (role) {
-                                    // Admin ahora abre 'home' para ver la tarjeta de administración
-                                    "ADMIN" -> "home"
-                                    "DOCENTE" -> "teacher_home"
-                                    "PADRE" -> "home"
-                                    "ESTUDIANTE" -> "student_home"
-                                    else -> "home"
+                            }
+                            if (displayName.isBlank()) {
+                                val emailStr = user.email
+                                if (!emailStr.isNullOrBlank()) {
+                                    for (coll in listOf("students", "teachers", "parents", "admins")) {
+                                        val query = firestore.collection(coll).whereEqualTo("email", emailStr).limit(1).get().await()
+                                        if (!query.isEmpty) {
+                                            val d = query.documents[0]
+                                            role = d.getString("role") ?: role
+                                            displayName = (d.getString("nombres") ?: d.getString("name")) ?: displayName
+                                            break
+                                        }
+                                    }
                                 }
-                                val intent = Intent(this, com.example.appcolegios.MainActivity::class.java)
-                                intent.putExtra("startDestination", startDestination)
-                                startActivity(intent)
-                                finish()
                             }
-                            .addOnFailureListener {
-                                // Si falla al leer rol, abrir home por defecto
-                                val intent = Intent(this, com.example.appcolegios.MainActivity::class.java)
-                                intent.putExtra("startDestination", "home")
-                                startActivity(intent)
-                                finish()
-                            }
+                        }
+
+                        if (role.isBlank()) role = "ADMIN"
+
+                        // Guardar en preferencias para sesiones persistentes
+                        val userPrefs = UserPreferencesRepository(applicationContext)
+                        withContext(Dispatchers.IO) {
+                            try {
+                                userPrefs.updateUserData(user.uid, role, displayName)
+                            } catch (_: Exception) {}
+                        }
+
+                        val startDestination = when (role.uppercase()) {
+                            "ADMIN" -> "home"
+                            "DOCENTE" -> "teacher_home"
+                            "PADRE" -> "home"
+                            "ESTUDIANTE" -> "student_home"
+                            else -> "home"
+                        }
+
+                        val intent = Intent(this@LoginActivity, com.example.appcolegios.MainActivity::class.java)
+                        intent.putExtra("startDestination", startDestination)
+                        startActivity(intent)
+                        finish()
+                    } catch (e: Exception) {
+                        Toast.makeText(this@LoginActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                     }
-                    .addOnFailureListener { e ->
-                        Toast.makeText(this, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                    }
-            }
-        }
+                }
+             }
+         }
         resetLink.setOnClickListener {
             startActivity(Intent(this, ResetPasswordActivity::class.java))
         }
