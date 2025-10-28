@@ -27,9 +27,7 @@ enum class AttendanceStatus {
     PRESENTE, AUSENTE, TARDE, JUSTIFICADO
 }
 
-data class CourseSimple(val id: String, val name: String, val students: List<StudentSimple>)
-data class StudentSimple(val id: String, val name: String)
-
+// Usamos los modelos centralizados en Models.kt: CourseSimple y StudentSimple
 // Agregado: representación simple de un registro de asistencia usado por AttendanceRecordItem
 data class AttendanceRecord(
     val date: Date,
