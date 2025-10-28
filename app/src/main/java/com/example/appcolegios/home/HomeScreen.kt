@@ -240,7 +240,8 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
                 add(QuickTile(stringResource(R.string.notifications)) { onNavigate(AppRoutes.Notifications.route) })
                 add(QuickTile(stringResource(R.string.messages)) { onNavigate(AppRoutes.Messages.route) })
                 add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
-                add(QuickTile(stringResource(R.string.dashboard)) { onNavigate(AppRoutes.Dashboard.route) })
+                // Se elimina el QuickTile de "Dashboard" aquí porque ya existe la tarjeta principal
+                // en la sección de Administración (evita duplicado en el panel admin)
             }
             else -> buildList {
                 add(QuickTile(stringResource(R.string.transporte)) { onNavigate(AppRoutes.Transport.route) })

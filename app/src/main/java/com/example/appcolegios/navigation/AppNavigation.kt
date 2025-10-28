@@ -436,12 +436,8 @@ fun AppNavigation(
                                     overflowOpen = false
                                     navController.navigate(AppRoutes.Calendar.route)
                                 })
-                                if (isAdmin) {
-                                    DropdownMenuItem(text = { Text(stringResource(R.string.dashboard)) }, onClick = {
-                                        overflowOpen = false
-                                        navController.navigate(AppRoutes.Dashboard.route)
-                                    })
-                                }
+                                // El menú overflow ya no muestra "Dashboard" para evitar duplicado
+                                // (la opción Dashboard permanece en el drawer lateral para administradores)
                             }
                         },
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
