@@ -176,4 +176,9 @@
     <string name="sample_enrollment_status">Activo</string>
     <string name="promedio_label">Promedio:</string>
     <string name="sample_average">4.5</string>
+
+    <!-- Nuevos strings para recuperación de contraseña -->
+    <string name="reset_password_title">Recuperar contraseña</string>
+    <string name="reset_password_hint">Correo electrónico</string>
+    <string name="reset_password_button">Enviar correo</string>
 </resources>
