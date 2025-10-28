@@ -47,11 +47,13 @@ data class ActivityInfo(
 )
 
 @Composable
-fun TeacherHomeScreen(navController: NavController) {
+fun TeacherHomeScreen(navController: NavController, displayName: String? = null) {
     var state by remember { mutableStateOf(TeacherDashboardState()) }
 
-    LaunchedEffect(Unit) {
-        state = loadTeacherDashboardData()
+    LaunchedEffect(displayName) {
+        state = loadTeacherDashboardData().copy(
+            teacherName = displayName?.takeIf { it.isNotBlank() } ?: "Docente"
+        )
     }
 
     if (state.loading) {
@@ -190,19 +192,19 @@ private fun QuickActionsCard(navController: NavController) {
                 QuickActionButton(
                     icon = Icons.Filled.Grade,
                     label = "Calificar",
-                    onClick = { navController.navigate(com.example.appcolegios.navigation.AppRoutes.Grading.route) }
+                    onClick = { navController.navigate(AppRoutes.Grading.route) }
                 )
 
                 QuickActionButton(
                     icon = Icons.AutoMirrored.Filled.Assignment,
                     label = "Tarea",
-                    onClick = { navController.navigate(com.example.appcolegios.navigation.AppRoutes.Tasks.route) }
+                    onClick = { navController.navigate(AppRoutes.Tasks.route) }
                 )
 
                 QuickActionButton(
                     icon = Icons.AutoMirrored.Filled.Message,
                     label = "Comunicado",
-                    onClick = { navController.navigate(com.example.appcolegios.navigation.AppRoutes.Announcements.route) }
+                    onClick = { navController.navigate(AppRoutes.Announcements.route) }
                 )
             }
         }
@@ -362,7 +364,7 @@ private fun ActivityCard(activity: ActivityInfo) {
 
 private fun loadTeacherDashboardData(): TeacherDashboardState {
     return TeacherDashboardState(
-        teacherName = "Herman González",
+        teacherName = "Docente",
         assignedCourses = listOf(
             CourseInfo("10-A", 32, "Matemáticas"),
             CourseInfo("10-B", 28, "Matemáticas"),

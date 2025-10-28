@@ -14,6 +14,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.compose.ui.platform.LocalContext
+import com.example.appcolegios.data.UserPreferencesRepository
+import androidx.compose.runtime.collectAsState
+import com.example.appcolegios.data.UserData
 
 // Estado simplificado para el dashboard de estudiante
 data class StudentDashboardState(
@@ -45,13 +49,18 @@ data class ActivityInfo(
 )
 
 @Composable
-fun StudentHomeScreen(navController: NavController) {
+fun StudentHomeScreen(navController: NavController, displayName: String? = null) {
     var state by remember { mutableStateOf(StudentDashboardState()) }
 
-    LaunchedEffect(Unit) {
+    val context = LocalContext.current
+    val userPrefs = remember { UserPreferencesRepository(context) }
+    val storedUser by userPrefs.userData.collectAsState(initial = UserData(null, null, null))
+
+    LaunchedEffect(displayName, storedUser) {
+        val nameToUse = displayName?.takeIf { it.isNotBlank() } ?: storedUser.name ?: "Estudiante"
         // Cargar datos de ejemplo rápidos (puedes reemplazar por ViewModel más tarde)
         state = StudentDashboardState(
-            studentName = "Estudiante Ejemplo",
+            studentName = nameToUse,
             enrolledCourses = listOf(CourseInfo("Matemáticas 101", 30, "Matemáticas")), // solo 1 curso
             todayClasses = listOf(ClassInfo("Matemáticas", "A1", "08:00", "Sala 1")),
             recentActivities = listOf(ActivityInfo("Tarea 1", "Tarea", "Matemáticas", "2025-11-01")),
