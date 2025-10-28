@@ -18,6 +18,8 @@ sealed class AppRoutes(val route: String) {
     object Calendar : AppRoutes("calendar")
     object Admin : AppRoutes("admin")
     object Dashboard : AppRoutes("dashboard")
+    object TeacherHome : AppRoutes("teacher_home")
+    object StudentHome : AppRoutes("student_home")
     object Chat : AppRoutes("chat/{otherUserId}")
     object NewMessage : AppRoutes("new_message")
     object Ubicacion : AppRoutes("ubicacion")

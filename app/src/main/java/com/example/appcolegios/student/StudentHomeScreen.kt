@@ -1,0 +1,236 @@
+package com.example.appcolegios.student
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Message
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+
+// Estado simplificado para el dashboard de estudiante
+data class StudentDashboardState(
+    val studentName: String = "",
+    val enrolledCourses: List<CourseInfo> = emptyList(),
+    val todayClasses: List<ClassInfo> = emptyList(),
+    val recentActivities: List<ActivityInfo> = emptyList(),
+    val loading: Boolean = true
+)
+
+data class CourseInfo(
+    val name: String,
+    val studentsCount: Int,
+    val subject: String
+)
+
+data class ClassInfo(
+    val subject: String,
+    val course: String,
+    val time: String,
+    val room: String
+)
+
+data class ActivityInfo(
+    val title: String,
+    val type: String,
+    val course: String,
+    val dueDate: String
+)
+
+@Composable
+fun StudentHomeScreen(navController: NavController) {
+    var state by remember { mutableStateOf(StudentDashboardState()) }
+
+    LaunchedEffect(Unit) {
+        // Cargar datos de ejemplo rápidos (puedes reemplazar por ViewModel más tarde)
+        state = StudentDashboardState(
+            studentName = "Estudiante Ejemplo",
+            enrolledCourses = listOf(CourseInfo("Matemáticas 101", 30, "Matemáticas")), // solo 1 curso
+            todayClasses = listOf(ClassInfo("Matemáticas", "A1", "08:00", "Sala 1")),
+            recentActivities = listOf(ActivityInfo("Tarea 1", "Tarea", "Matemáticas", "2025-11-01")),
+            loading = false
+        )
+    }
+
+    if (state.loading) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            StudentInfoCard(studentName = state.studentName, coursesCount = state.enrolledCourses.size)
+        }
+
+        item {
+            StudentQuickActionsCard(navController = navController)
+        }
+
+        item {
+            Text(
+                "Clases de Hoy",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        items(state.todayClasses) { classInfo ->
+            ClassCard(classInfo)
+        }
+
+        item {
+            Text(
+                "Mi Curso",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        // Mostrar solo el primer curso (si existe)
+        val firstCourse = state.enrolledCourses.firstOrNull()
+        if (firstCourse != null) {
+            item { CourseCard(firstCourse) }
+        }
+
+        item {
+            Text(
+                "Actividades Recientes",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        items(state.recentActivities) { activity ->
+            ActivityCard(activity)
+        }
+    }
+}
+
+@Composable
+private fun StudentInfoCard(studentName: String, coursesCount: Int) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.School,
+                contentDescription = null,
+                modifier = Modifier.size(48.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(
+                    studentName,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "$coursesCount curso(s) inscritos",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudentQuickActionsCard(navController: NavController) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text("Acciones Rápidas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                QuickActionButton(icon = Icons.Filled.CheckCircle, label = "Asistencia") {
+                    // navegar a asistencia
+                    navController.navigate("attendance")
+                }
+                // NO incluir la opción "Calificar" para estudiantes
+                QuickActionButton(icon = Icons.AutoMirrored.Filled.Message, label = "Mensajes") {
+                    navController.navigate("messages")
+                }
+                QuickActionButton(icon = Icons.AutoMirrored.Filled.Assignment, label = "Tareas") {
+                    navController.navigate("tasks")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
+        FilledIconButton(onClick = onClick, colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)) {
+            Icon(icon, contentDescription = label)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun ClassCard(classInfo: ClassInfo) {
+    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(classInfo.subject, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("${classInfo.course} • ${classInfo.time}", style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(classInfo.room, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun CourseCard(courseInfo: CourseInfo) {
+    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(courseInfo.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(courseInfo.subject, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text("${courseInfo.studentsCount} alumnos", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun ActivityCard(activityInfo: ActivityInfo) {
+    Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(activityInfo.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(activityInfo.course, style = MaterialTheme.typography.bodyMedium)
+            }
+            Text(activityInfo.dueDate, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}

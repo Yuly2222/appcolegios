@@ -10,16 +10,39 @@ import androidx.compose.ui.Modifier
 import com.example.appcolegios.navigation.AppNavigation
 import com.example.appcolegios.navigation.AppRoutes
 import com.example.appcolegios.ui.theme.AppColegiosTheme
+import com.example.appcolegios.data.UserPreferencesRepository
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val deepLinkHost = intent?.data?.host
-        val startDestination = when {
-            intent.getStringExtra("startDestination") != null -> intent.getStringExtra("startDestination")!!
-            deepLinkHost == "notifications" -> AppRoutes.Notifications.route
-            else -> AppRoutes.Splash.route
+        // Prioridad: startDestination explícito en intent (deep link o notificación)
+        var startDestination: String? = intent.getStringExtra("startDestination")
+        if (startDestination.isNullOrBlank()) {
+            startDestination = if (deepLinkHost == "notifications") AppRoutes.Notifications.route else null
         }
+
+        // Si no hay destino explícito, intentar leer rol desde preferencias y redirigir
+        if (startDestination.isNullOrBlank()) {
+            try {
+                val userPrefs = UserPreferencesRepository(applicationContext)
+                val userData = runBlocking { userPrefs.userData.first() }
+                val role = userData.role?.uppercase()
+                startDestination = when (role) {
+                    "ADMIN" -> AppRoutes.Home.route // admin verá Home con tarjeta de administración
+                    "DOCENTE" -> AppRoutes.TeacherHome.route
+                    "PADRE" -> AppRoutes.Home.route
+                    "ESTUDIANTE" -> AppRoutes.StudentHome.route
+                    else -> AppRoutes.Splash.route
+                }
+            } catch (e: Exception) {
+                startDestination = AppRoutes.Splash.route
+            }
+        }
+        // Asegurar valor no nulo
+        val resolvedStart = startDestination ?: AppRoutes.Splash.route
         setContent {
             AppColegiosTheme {
                 // A surface container using the 'background' color from the theme
@@ -27,7 +50,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppNavigation(startDestination = startDestination)
+                    AppNavigation(startDestination = resolvedStart)
                 }
             }
         }

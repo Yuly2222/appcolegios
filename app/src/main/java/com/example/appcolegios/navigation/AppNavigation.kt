@@ -69,6 +69,8 @@ import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.google.firebase.auth.FirebaseAuth
 import android.widget.Toast
+import com.example.appcolegios.teacher.TeacherHomeScreen
+import com.example.appcolegios.student.StudentHomeScreen
 
 @Composable
 fun AppNavigation(
@@ -92,7 +94,9 @@ fun AppNavigation(
         AppRoutes.Attendance.route,
         AppRoutes.Tasks.route,
         AppRoutes.Calendar.route,
-        AppRoutes.Dashboard.route
+        AppRoutes.Dashboard.route,
+        AppRoutes.TeacherHome.route,
+        AppRoutes.StudentHome.route
     )
 
     val showChrome = currentDestination?.route in mainRoutes
@@ -177,6 +181,8 @@ fun AppNavigation(
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController = navController) }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
+            composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen() }
+            composable(AppRoutes.StudentHome.route) { StudentHomeScreen(navController = navController) }
             // Ruta Ubicación del colegio
             composable(AppRoutes.Ubicacion.route) { UbicacionScreen() }
             composable(
@@ -387,6 +393,8 @@ fun AppNavigation(
                                     AppRoutes.Attendance.route -> stringResource(R.string.attendance)
                                     AppRoutes.Tasks.route -> stringResource(R.string.tasks)
                                     AppRoutes.Calendar.route -> stringResource(R.string.calendar)
+                                    AppRoutes.TeacherHome.route -> stringResource(R.string.home)
+                                    AppRoutes.StudentHome.route -> stringResource(R.string.home)
                                     AppRoutes.Dashboard.route -> stringResource(R.string.dashboard)
                                     else -> stringResource(R.string.app_name)
                                 }

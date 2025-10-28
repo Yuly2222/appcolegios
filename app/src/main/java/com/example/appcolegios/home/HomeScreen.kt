@@ -23,6 +23,7 @@ import com.example.appcolegios.navigation.AppRoutes
 import com.example.appcolegios.demo.DemoData
 import com.example.appcolegios.teacher.TeacherHomeScreen
 import com.example.appcolegios.parent.ParentHomeScreen
+import com.example.appcolegios.student.StudentHomeScreen
 
 @Composable
 fun HomeScreen(navController: NavController) {
@@ -43,8 +44,10 @@ fun HomeScreen(navController: NavController) {
         else -> {
             // Mostrar pantalla específica según el rol
             when (ui.role) {
+                Role.ADMIN -> HomeContent(ui = ui, onNavigate = { route -> navController.navigate(route) })
                 Role.DOCENTE -> TeacherHomeScreen()
                 Role.PADRE -> ParentHomeScreen()
+                Role.ESTUDIANTE -> StudentHomeScreen(navController) // Los estudiantes ven un inicio separado similar al de profesores
                 else -> HomeContent(ui = ui, onNavigate = { route -> navController.navigate(route) })
             }
         }
