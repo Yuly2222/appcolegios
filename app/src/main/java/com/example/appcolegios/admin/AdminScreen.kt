@@ -1,3 +1,5 @@
+@file:Suppress("RedundantQualifierName")
+
 package com.example.appcolegios.admin
 
 import android.content.Intent
@@ -12,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -27,6 +30,10 @@ import java.io.BufferedInputStream
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import org.apache.poi.ss.usermodel.Row
+
+// Helper local para leer celdas de forma segura
+private fun safeCellValue(row: Row, index: Int): String? = row.getCell(index)?.toString()?.trim()?.takeIf { it.isNotBlank() }
 
 @Composable
 fun AdminScreen() {
@@ -97,10 +104,12 @@ fun AdminScreen() {
                                         apellidos = row.getCell(1)?.toString()?.trim() ?: ""
                                         tipo = row.getCell(2)?.toString()?.trim() ?: ""
                                         // salto campos intermedios
-                                        email = row.getCell(6)?.toString()?.trim() ?: ""
-                                        pass = row.getCell(7)?.toString()?.trim()?.takeIf { it.isNotBlank() }
-                                        val rawRol = row.getCell(8)?.toString()?.trim()
-                                        rol = if (rawRol.isNullOrBlank()) "ESTUDIANTE" else rawRol
+                                        email = safeCellValue(row,6) ?: ""
+                                        val cell7 = safeCellValue(row,7)
+                                        pass = cell7
+                                        // leer rol
+                                        val rawRol = safeCellValue(row,8) ?: ""
+                                        rol = if (rawRol.isBlank()) "ESTUDIANTE" else rawRol
                                     } else if (cellCount >= 5) {
                                         nombre = row.getCell(0)?.toString()?.trim() ?: ""
                                         apellidos = row.getCell(1)?.toString()?.trim() ?: ""
@@ -145,11 +154,25 @@ fun AdminScreen() {
                                                 "email" to email,
                                                 "tipo" to tipo,
                                                 "role" to roleParsed,
-                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                                "importedAt" to Timestamp.now()
                                             )
                                             db.collection(coll).document(uid).set(data).await()
-                                            // enviar verificacion
-                                            try { authImporter.currentUser?.sendEmailVerification() } catch (_: Exception) {}
+                                            // Además, crear documento en la colección "users" para que la app lo encuentre
+                                            try {
+                                                val displayName = ("$nombre $apellidos").trim()
+                                                val userMap = hashMapOf(
+                                                    "displayName" to displayName,
+                                                    "email" to email,
+                                                    "role" to roleParsed
+                                                )
+                                                db.collection("users").document(uid).set(userMap).await()
+                                            } catch (_: Exception) { }
+                                            // enviar verificacion de forma asíncrona y esperar
+                                            try {
+                                                res.user?.let { it.sendEmailVerification().await() }
+                                            } catch (_: Exception) { }
+                                            // Asegurarse de no dejar al importer autenticado
+                                            try { authImporter.signOut() } catch (_: Exception) {}
                                         } else {
                                             // Guardar doc y encolar petición para backend
                                             val data = hashMapOf(
@@ -158,15 +181,32 @@ fun AdminScreen() {
                                                 "email" to email,
                                                 "tipo" to tipo,
                                                 "role" to roleParsed,
-                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                                "importedAt" to Timestamp.now()
                                             )
                                             db.collection(coll).add(data).await()
                                             db.collection("auth_queue").add(hashMapOf(
                                                 "email" to email,
                                                 "role" to roleParsed,
                                                 "displayName" to ("$nombre $apellidos").trim(),
-                                                "requestedAt" to com.google.firebase.Timestamp.now()
+                                                "requestedAt" to Timestamp.now()
                                             )).await()
+
+                                            // Cambio mínimo: crear también un documento en "users" para que la app tenga acceso al correo
+                                            try {
+                                                val userMap = hashMapOf(
+                                                    "displayName" to ("$nombre $apellidos").trim(),
+                                                    "email" to email,
+                                                    "role" to roleParsed,
+                                                    "importedAt" to Timestamp.now()
+                                                )
+                                                db.collection("users").add(userMap).await()
+                                            } catch (_: Exception) { }
+
+                                            // Intentar enviar email de restablecimiento (si la cuenta ya existe esto ayudará al usuario a establecer contraseña)
+                                            try {
+                                                val mainAuth = FirebaseAuth.getInstance()
+                                                mainAuth.sendPasswordResetEmail(email).await()
+                                            } catch (_: Exception) { }
                                         }
                                         count++
                                     } catch (e: Exception) {
@@ -213,7 +253,7 @@ fun AdminScreen() {
                                                 "email" to email,
                                                 "role" to parsedRole,
                                                 "type" to type,
-                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                                "importedAt" to Timestamp.now()
                                             )).await()
                                         } else {
                                             db.collection(coll).add(hashMapOf(
@@ -221,13 +261,13 @@ fun AdminScreen() {
                                                 "name" to name,
                                                 "role" to parsedRole,
                                                 "type" to type,
-                                                "importedAt" to com.google.firebase.Timestamp.now()
+                                                "importedAt" to Timestamp.now()
                                             )).await()
                                             db.collection("auth_queue").add(hashMapOf(
                                                 "email" to email,
                                                 "role" to parsedRole,
                                                 "displayName" to name,
-                                                "requestedAt" to com.google.firebase.Timestamp.now()
+                                                "requestedAt" to Timestamp.now()
                                             )).await()
                                         }
                                         localCount++

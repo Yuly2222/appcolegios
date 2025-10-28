@@ -53,6 +53,7 @@ class UserPreferencesRepository(context: Context) {
     }
 
     // Limpia todos los datos del usuario al cerrar sesión
+    @Suppress("unused")
     suspend fun clearUserData() {
         dataStore.edit { preferences ->
             preferences.clear()
@@ -65,9 +66,9 @@ data class UserData(
     val role: String?, // mantener string para compatibilidad; usar helper de conversión
     val name: String?
 ) {
-    // Si no hay rol (null o vacío) o la cadena no coincide, asumimos ADMIN
+    // Si no hay rol (null o vacío) retornamos null para evitar asumir ADMIN por defecto
     val roleEnum: Role? get() = when {
-        role.isNullOrBlank() -> Role.ADMIN
-        else -> Role.fromString(role) ?: Role.ADMIN
+        role.isNullOrBlank() -> null
+        else -> Role.fromString(role)
     }
 }

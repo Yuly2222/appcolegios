@@ -36,6 +36,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    @Suppress("unused")
     fun login(email: String, password: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
@@ -43,6 +44,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 val result = auth.signInWithEmailAndPassword(email, password).await()
                 val user = result.user
                 if (user != null) {
+                    // Verificar email
+                    if (!user.isEmailVerified) {
+                        auth.signOut()
+                        _authState.value = AuthState.Error("Por favor verifica tu correo antes de iniciar sesión.")
+                        return@launch
+                    }
                     fetchUserRole(user.uid)
                 } else {
                     _authState.value = AuthState.Error("Error de autenticación.")
@@ -68,6 +75,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         "role" to normalizedRole
                     )
                     firestore.collection("users").document(user.uid).set(userMap).await()
+                    // enviar email de verificación
+                    try { user.sendEmailVerification().await() } catch (_: Exception) {}
                     _authState.value = AuthState.Idle
                     auth.signOut()
                 } else {
@@ -103,8 +112,50 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val document = firestore.collection("users").document(userId).get().await()
                 // Si el documento no tiene rol, asumimos 'ADMIN'
-                val role = document.getString("role") ?: "ADMIN"
-                val displayName = document.getString("displayName") ?: ""
+                var role = document.getString("role") ?: ""
+                var displayName = document.getString("displayName") ?: ""
+
+                // Si no encontramos documento en users, intentar buscar por email en colecciones específicas
+                if (role.isBlank() && displayName.isBlank()) {
+                    // intentar localizar por uid en colecciones conocidas
+                    val collections = listOf("students", "teachers", "parents", "admins")
+                    for (coll in collections) {
+                        val doc = firestore.collection(coll).document(userId).get().await()
+                        if (doc.exists()) {
+                            role = doc.getString("role") ?: when (coll) {
+                                "students" -> "ESTUDIANTE"
+                                "teachers" -> "DOCENTE"
+                                "parents" -> "PADRE"
+                                "admins" -> "ADMIN"
+                                else -> "ADMIN"
+                            }
+                            displayName = (doc.getString("nombres") ?: doc.getString("name")) ?: ""
+                            break
+                        }
+                    }
+                    // Si aún no hallamos por uid, intentar buscar por email si FirebaseAuth tiene usuario con ese uid
+                    if (displayName.isBlank()) {
+                        try {
+                            val userRecord = auth.currentUser
+                            // no siempre disponible; intentar buscar por email en colecciones
+                            val email = userRecord?.email
+                            if (!email.isNullOrBlank()) {
+                                for (coll in listOf("students", "teachers", "parents", "admins")) {
+                                    val query = firestore.collection(coll).whereEqualTo("email", email).limit(1).get().await()
+                                    if (!query.isEmpty) {
+                                        val d = query.documents[0]
+                                        role = d.getString("role") ?: role
+                                        displayName = (d.getString("nombres") ?: d.getString("name")) ?: displayName
+                                        break
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                if (role.isBlank()) role = "ADMIN"
+                if (displayName.isBlank()) displayName = ""
 
                 // Guardar datos unificados en preferencias
                 userPrefs.updateUserData(userId, role, displayName)
@@ -116,6 +167,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    @Suppress("unused")
     fun logout() {
         viewModelScope.launch {
             auth.signOut()
