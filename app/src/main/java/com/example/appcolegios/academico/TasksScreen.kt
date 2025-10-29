@@ -24,10 +24,88 @@ import androidx.compose.ui.unit.dp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.example.appcolegios.data.UserPreferencesRepository
+import com.example.appcolegios.data.UserData
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
+
+@Composable
+fun DatePickerCompose(initialDate: Date, onDateSelected: (Date) -> Unit, onDismiss: () -> Unit) {
+    // Simple month grid selector with controllable colors
+    val calState = remember { mutableStateOf(Calendar.getInstance().apply { time = initialDate }) }
+    val year = calState.value.get(Calendar.YEAR)
+    val month = calState.value.get(Calendar.MONTH)
+    val monthLabel = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(calState.value.time)
+
+    AlertDialog(onDismissRequest = onDismiss, confirmButton = {}, text = {
+         Column(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { calState.value.add(Calendar.MONTH, -1) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Prev") }
+                Text(monthLabel, style = MaterialTheme.typography.titleMedium)
+                IconButton(onClick = { calState.value.add(Calendar.MONTH, 1) }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next") }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            // build day grid
+            val temp = Calendar.getInstance().apply { set(year, month, 1) }
+            val firstDow = temp.get(Calendar.DAY_OF_WEEK) // 1=Sun
+            val daysInMonth = temp.getActualMaximum(Calendar.DAY_OF_MONTH)
+            val blanks = (firstDow - temp.firstDayOfWeek + 7) % 7
+
+            Column {
+                // weekday headers
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    val df = SimpleDateFormat("EE", Locale.getDefault())
+                    val headerCal = Calendar.getInstance()
+                    for (i in 0 until 7) {
+                        headerCal.set(Calendar.DAY_OF_WEEK, headerCal.firstDayOfWeek + i)
+                        Text(df.format(headerCal.time), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                // grid
+                var day = 1
+                val rows = ((blanks + daysInMonth) + 6) / 7
+                for (r in 0 until rows) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        for (c in 0 until 7) {
+                            val index = r * 7 + c
+                            if (index < blanks || day > daysInMonth) {
+                                Box(modifier = Modifier.weight(1f).height(40.dp)) { }
+                            } else {
+                                val thisDay = day
+                                val cellCal = Calendar.getInstance().apply { set(year, month, thisDay) }
+                                val isToday = Calendar.getInstance().let { it.get(Calendar.YEAR)==cellCal.get(Calendar.YEAR) && it.get(Calendar.DAY_OF_YEAR)==cellCal.get(Calendar.DAY_OF_YEAR) }
+                                val selectedCal = Calendar.getInstance().apply { time = initialDate }
+                                val isSelected = selectedCal.get(Calendar.YEAR) == cellCal.get(Calendar.YEAR) && selectedCal.get(Calendar.DAY_OF_YEAR) == cellCal.get(Calendar.DAY_OF_YEAR)
+                                val bg = when {
+                                    isSelected -> MaterialTheme.colorScheme.primaryContainer
+                                    isToday -> MaterialTheme.colorScheme.primary
+                                    else -> MaterialTheme.colorScheme.surface
+                                }
+                                val fg = when {
+                                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
+                                    isToday -> MaterialTheme.colorScheme.onPrimary
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                }
+                                Box(modifier = Modifier.weight(1f).height(40.dp).padding(2.dp)) {
+                                    Card(modifier = Modifier.fillMaxSize().clickable { onDateSelected(cellCal.time) }.background(bg), colors = CardDefaults.cardColors(containerColor = bg)) {
+                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                                            Text(thisDay.toString(), color = fg)
+                                        }
+                                    }
+                                }
+                                day++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
 
 private const val MAX_ATTACHMENTS = 5
 private const val MAX_ATTACHMENT_BYTES: Long = 10L * 1024L * 1024L // 10 MB
@@ -54,6 +132,15 @@ fun TasksScreen() {
     var courses by remember { mutableStateOf<List<CourseSimple>>(emptyList()) }
     var selectedCourse by remember { mutableStateOf<CourseSimple?>(null) }
     val scope = rememberCoroutineScope()
+
+    // Obtener rol del usuario para decidir si puede crear/editar tareas
+    val userPrefs = remember { UserPreferencesRepository(context) }
+    val currentUserData by userPrefs.userData.collectAsState(initial = UserData(null, null, null))
+    val roleNormalized = (currentUserData.role ?: "").trim().uppercase(Locale.getDefault())
+    val canCreate = when (roleNormalized) {
+        "DOCENTE", "TEACHER", "PROFESOR", "ADMIN" -> true
+        else -> false
+    }
 
     // fields for task
     var title by remember { mutableStateOf("") }
@@ -220,9 +307,11 @@ fun TasksScreen() {
                                         if (d != null) Spacer(Modifier.height(6.dp))
                                         if (d != null) Text("Fecha: ${dateFormat.format(d)}", style = MaterialTheme.typography.bodySmall)
                                     }
-                                    Column {
-                                        IconButton(onClick = { editingTask = t }) { Icon(Icons.Filled.Edit, contentDescription = "Editar") }
-                                        IconButton(onClick = { showDeleteConfirmFor = t }) { Icon(Icons.Filled.Delete, contentDescription = "Eliminar") }
+                                    if (canCreate) {
+                                        Column {
+                                            IconButton(onClick = { editingTask = t }) { Icon(Icons.Filled.Edit, contentDescription = "Editar") }
+                                            IconButton(onClick = { showDeleteConfirmFor = t }) { Icon(Icons.Filled.Delete, contentDescription = "Eliminar") }
+                                        }
                                     }
                                 }
                             }
@@ -233,149 +322,151 @@ fun TasksScreen() {
 
             Spacer(Modifier.height(12.dp))
 
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título de la tarea") }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descripción (opcional)") }, modifier = Modifier.fillMaxWidth(), maxLines = 4)
-            Spacer(Modifier.height(8.dp))
+            if (canCreate) {
+                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título de la tarea") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descripción (opcional)") }, modifier = Modifier.fillMaxWidth(), maxLines = 4)
+                Spacer(Modifier.height(8.dp))
 
-            // attachments UI
-            Text("Adjuntos (max $MAX_ATTACHMENTS, max 10MB cada)")
-            Spacer(Modifier.height(4.dp))
-            if (attachments.isEmpty()) Text("No hay archivos adjuntos seleccionados", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            attachments.forEachIndexed { idx, uri ->
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text(uri.lastPathSegment ?: uri.toString(), modifier = Modifier.weight(1f))
-                    IconButton(onClick = { attachments.removeAt(idx) }) { Icon(Icons.Filled.Close, contentDescription = "Quitar") }
+                // attachments UI
+                Text("Adjuntos (max $MAX_ATTACHMENTS, max 10MB cada)")
+                Spacer(Modifier.height(4.dp))
+                if (attachments.isEmpty()) Text("No hay archivos adjuntos seleccionados", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                attachments.forEachIndexed { idx, uri ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(uri.lastPathSegment ?: uri.toString(), modifier = Modifier.weight(1f))
+                        IconButton(onClick = { attachments.removeAt(idx) }) { Icon(Icons.Filled.Close, contentDescription = "Quitar") }
+                    }
                 }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { filePicker.launch(arrayOf("*/*")) }, enabled = attachments.size < MAX_ATTACHMENTS) {
-                    Text("Adjuntar archivos")
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { filePicker.launch(arrayOf("*/*")) }, enabled = attachments.size < MAX_ATTACHMENTS) {
+                        Text("Adjuntar archivos")
+                    }
+                    if (attachments.size >= MAX_ATTACHMENTS) Text("Máximo alcanzado", color = MaterialTheme.colorScheme.error)
                 }
-                if (attachments.size >= MAX_ATTACHMENTS) Text("Máximo alcanzado", color = MaterialTheme.colorScheme.error)
-            }
 
-            Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
 
-            // Fecha: usar picker Compose controlable de colores
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { showDatePicker = true }) { Text(if (dueDate == null) "Seleccionar fecha" else dateFormat.format(dueDate!!)) }
-                Spacer(Modifier.weight(1f))
-                Button(onClick = {
-                    if (title.isBlank()) { Toast.makeText(context, "Título requerido", Toast.LENGTH_SHORT).show(); return@Button }
-                    if (dueDate == null) { Toast.makeText(context, "Fecha requerida", Toast.LENGTH_SHORT).show(); return@Button }
-                    if (uploading) { Toast.makeText(context, "Subiendo... espere", Toast.LENGTH_SHORT).show(); return@Button }
+                // Fecha: usar picker Compose controlable de colores
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { showDatePicker = true }) { Text(if (dueDate == null) "Seleccionar fecha" else dateFormat.format(dueDate!!)) }
+                    Spacer(Modifier.weight(1f))
+                    Button(onClick = {
+                        if (title.isBlank()) { Toast.makeText(context, "Título requerido", Toast.LENGTH_SHORT).show(); return@Button }
+                        if (dueDate == null) { Toast.makeText(context, "Fecha requerida", Toast.LENGTH_SHORT).show(); return@Button }
+                        if (uploading) { Toast.makeText(context, "Subiendo... espere", Toast.LENGTH_SHORT).show(); return@Button }
 
-                    scope.launch {
-                        uploading = true
-                        failedUploads.clear()
-                        uploadProgress = 0
-                        val uploadedUrls = mutableListOf<String>()
-                        val uploadedPaths = mutableListOf<String>()
+                        scope.launch {
+                            uploading = true
+                            failedUploads.clear()
+                            uploadProgress = 0
+                            val uploadedUrls = mutableListOf<String>()
+                            val uploadedPaths = mutableListOf<String>()
 
-                        try {
-                            val total = attachments.size.takeIf { it > 0 } ?: 0
-                            var completed = 0
-                            for (uri in attachments.toList()) {
-                                try {
-                                    val filename = uri.lastPathSegment?.substringAfterLast('/') ?: "file_${System.currentTimeMillis()}"
-                                    val path = "tasks/${course.id}/${System.currentTimeMillis()}_${filename}"
-                                    val ref = storage.reference.child(path)
-                                    val input = context.contentResolver.openInputStream(uri)
-                                    if (input != null) {
-                                        ref.putStream(input).await()
-                                        val url = ref.downloadUrl.await().toString()
-                                        uploadedUrls.add(url)
-                                        uploadedPaths.add(path)
-                                    } else {
+                            try {
+                                val total = attachments.size.takeIf { it > 0 } ?: 0
+                                var completed = 0
+                                for (uri in attachments.toList()) {
+                                    try {
+                                        val filename = uri.lastPathSegment?.substringAfterLast('/') ?: "file_${System.currentTimeMillis()}"
+                                        val path = "tasks/${course.id}/${System.currentTimeMillis()}_${filename}"
+                                        val ref = storage.reference.child(path)
+                                        val input = context.contentResolver.openInputStream(uri)
+                                        if (input != null) {
+                                            ref.putStream(input).await()
+                                            val url = ref.downloadUrl.await().toString()
+                                            uploadedUrls.add(url)
+                                            uploadedPaths.add(path)
+                                        } else {
+                                            failedUploads.add(uri)
+                                        }
+                                    } catch (e: Exception) {
                                         failedUploads.add(uri)
                                     }
-                                } catch (e: Exception) {
-                                    failedUploads.add(uri)
+                                    completed++
+                                    uploadProgress = if (total > 0) (completed * 100 / total) else 100
                                 }
-                                completed++
-                                uploadProgress = if (total > 0) (completed * 100 / total) else 100
-                            }
 
-                            val task = hashMapOf(
-                                "courseId" to course.id,
-                                "courseName" to course.name,
-                                "teacherId" to (auth.currentUser?.uid ?: ""),
-                                "title" to title,
-                                "description" to description,
-                                "dueDate" to com.google.firebase.Timestamp(dueDate!!),
-                                "attachments" to uploadedUrls,
-                                "attachmentPaths" to uploadedPaths,
-                                "createdAt" to com.google.firebase.Timestamp.now()
-                            )
-                            val ref = firestore.collection("tasks").add(task).await()
-
-                            // Crear notificaciones para cada estudiante
-                            course.students.forEach { s ->
-                                val notif = hashMapOf(
-                                    "titulo" to "Nueva tarea: $title",
-                                    "cuerpo" to (description.ifBlank { "Nueva tarea asignada" }).take(200),
-                                    "remitente" to (auth.currentUser?.email ?: "Profesor"),
-                                    "fechaHora" to com.google.firebase.Timestamp.now(),
-                                    "leida" to false,
-                                    "relatedId" to ref.id,
-                                    "type" to "task"
+                                val task = hashMapOf(
+                                    "courseId" to course.id,
+                                    "courseName" to course.name,
+                                    "teacherId" to (auth.currentUser?.uid ?: ""),
+                                    "title" to title,
+                                    "description" to description,
+                                    "dueDate" to com.google.firebase.Timestamp(dueDate!!),
+                                    "attachments" to uploadedUrls,
+                                    "attachmentPaths" to uploadedPaths,
+                                    "createdAt" to com.google.firebase.Timestamp.now()
                                 )
-                                firestore.collection("users").document(s.id).collection("notifications").add(notif)
-                            }
+                                val ref = firestore.collection("tasks").add(task).await()
 
-                            Toast.makeText(context, "Tarea creada", Toast.LENGTH_SHORT).show()
-                            // limpiar
-                            title = ""; description = ""; dueDate = null
-                            attachments.clear()
-
-                            // recargar tasks
-                            // force reload by re-triggering LaunchedEffect for course.id
-                            // simplest: reload manually
-                            loadingTasks = true
-                            tasksForCourse.clear()
-                            try {
-                                val snap2 = firestore.collection("tasks").whereEqualTo("courseId", course.id).orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
-                                snap2.documents.forEach { d ->
-                                    val id = d.id
-                                    val titleDoc = d.getString("title") ?: ""
-                                    val descDoc = d.getString("description") ?: ""
-                                    val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
-                                    val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
-                                    val attsStr = atts.mapNotNull { it?.toString() }
-                                    val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
-                                    val pathsStr = paths.mapNotNull { it?.toString() }
-                                    tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                                // Crear notificaciones para cada estudiante
+                                course.students.forEach { s ->
+                                    val notif = hashMapOf(
+                                        "titulo" to "Nueva tarea: $title",
+                                        "cuerpo" to (description.ifBlank { "Nueva tarea asignada" }).take(200),
+                                        "remitente" to (auth.currentUser?.email ?: "Profesor"),
+                                        "fechaHora" to com.google.firebase.Timestamp.now(),
+                                        "leida" to false,
+                                        "relatedId" to ref.id,
+                                        "type" to "task"
+                                    )
+                                    firestore.collection("users").document(s.id).collection("notifications").add(notif)
                                 }
-                            } catch (_: Exception) {}
-                            loadingTasks = false
 
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error creando tarea: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                        } finally {
-                            uploading = false
-                            uploadProgress = 0
+                                Toast.makeText(context, "Tarea creada", Toast.LENGTH_SHORT).show()
+                                // limpiar
+                                title = ""; description = ""; dueDate = null
+                                attachments.clear()
+
+                                // recargar tasks
+                                // force reload by re-triggering LaunchedEffect for course.id
+                                // simplest: reload manually
+                                loadingTasks = true
+                                tasksForCourse.clear()
+                                try {
+                                    val snap2 = firestore.collection("tasks").whereEqualTo("courseId", course.id).orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+                                    snap2.documents.forEach { d ->
+                                        val id = d.id
+                                        val titleDoc = d.getString("title") ?: ""
+                                        val descDoc = d.getString("description") ?: ""
+                                        val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
+                                        val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
+                                        val attsStr = atts.mapNotNull { it?.toString() }
+                                        val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
+                                        val pathsStr = paths.mapNotNull { it?.toString() }
+                                        tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                                    }
+                                } catch (_: Exception) {}
+                                loadingTasks = false
+
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Error creando tarea: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                            } finally {
+                                uploading = false
+                                uploadProgress = 0
+                            }
                         }
-                    }
-                }) { Text("Crear tarea") }
-            }
+                    }) { Text("Crear tarea") }
+                }
 
-            // picker compose dialog
-            if (showDatePicker) {
-                DatePickerCompose(initialDate = dueDate ?: Date(), onDateSelected = { d -> dueDate = d; showDatePicker = false }, onDismiss = { showDatePicker = false })
-            }
+                // picker compose dialog
+                if (showDatePicker) {
+                    DatePickerCompose(initialDate = dueDate ?: Date(), onDateSelected = { d -> dueDate = d; showDatePicker = false }, onDismiss = { showDatePicker = false })
+                }
 
-            Spacer(Modifier.height(16.dp))
-            Text("Estudiantes en el curso", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(8.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(course.students) { s ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(s.name, style = MaterialTheme.typography.titleMedium)
-                                Text(s.id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(16.dp))
+                Text("Estudiantes en el curso", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(course.students) { s ->
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(s.name, style = MaterialTheme.typography.titleMedium)
+                                    Text(s.id, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
@@ -391,8 +482,8 @@ fun TasksScreen() {
             title = { Text("Subiendo adjuntos") },
             text = {
                 Column {
-                    // LinearProgressIndicator expects a Float progress, not a lambda
-                    LinearProgressIndicator(progress = uploadProgress / 100f)
+                    // LinearProgressIndicator espera ahora un lambda `progress` (evita la sobrecarga deprecada)
+                    LinearProgressIndicator(progress = { uploadProgress / 100f })
                      Spacer(Modifier.height(8.dp))
                      Text("$uploadProgress%")
                  }
@@ -551,78 +642,3 @@ fun TasksScreen() {
     }
 }
 
-@Composable
-fun DatePickerCompose(initialDate: Date, onDateSelected: (Date) -> Unit, onDismiss: () -> Unit) {
-    // Simple month grid selector with controllable colors
-    val calState = remember { mutableStateOf(Calendar.getInstance().apply { time = initialDate }) }
-    val year = calState.value.get(Calendar.YEAR)
-    val month = calState.value.get(Calendar.MONTH)
-    val monthLabel = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(calState.value.time)
-
-    AlertDialog(onDismissRequest = onDismiss, confirmButton = {}, text = {
-         Column(modifier = Modifier.fillMaxWidth()) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { calState.value.add(Calendar.MONTH, -1) }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Prev") }
-                Text(monthLabel, style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = { calState.value.add(Calendar.MONTH, 1) }) { Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next") }
-            }
-
-            Spacer(Modifier.height(8.dp))
-            // build day grid
-            val temp = Calendar.getInstance().apply { set(year, month, 1) }
-            val firstDow = temp.get(Calendar.DAY_OF_WEEK) // 1=Sun
-            val daysInMonth = temp.getActualMaximum(Calendar.DAY_OF_MONTH)
-            val blanks = (firstDow - temp.firstDayOfWeek + 7) % 7
-
-            Column {
-                // weekday headers
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    val df = SimpleDateFormat("EE", Locale.getDefault())
-                    val headerCal = Calendar.getInstance()
-                    for (i in 0 until 7) {
-                        headerCal.set(Calendar.DAY_OF_WEEK, headerCal.firstDayOfWeek + i)
-                        Text(df.format(headerCal.time), modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-
-                // grid
-                var day = 1
-                val rows = ((blanks + daysInMonth) + 6) / 7
-                for (r in 0 until rows) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        for (c in 0 until 7) {
-                            val index = r * 7 + c
-                            if (index < blanks || day > daysInMonth) {
-                                Box(modifier = Modifier.weight(1f).height(40.dp)) { }
-                            } else {
-                                val thisDay = day
-                                val cellCal = Calendar.getInstance().apply { set(year, month, thisDay) }
-                                val isToday = Calendar.getInstance().let { it.get(Calendar.YEAR)==cellCal.get(Calendar.YEAR) && it.get(Calendar.DAY_OF_YEAR)==cellCal.get(Calendar.DAY_OF_YEAR) }
-                                val selectedCal = Calendar.getInstance().apply { time = initialDate }
-                                val isSelected = selectedCal.get(Calendar.YEAR) == cellCal.get(Calendar.YEAR) && selectedCal.get(Calendar.DAY_OF_YEAR) == cellCal.get(Calendar.DAY_OF_YEAR)
-                                val bg = when {
-                                    isSelected -> MaterialTheme.colorScheme.primaryContainer
-                                    isToday -> MaterialTheme.colorScheme.primary
-                                    else -> MaterialTheme.colorScheme.surface
-                                }
-                                val fg = when {
-                                    isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-                                    isToday -> MaterialTheme.colorScheme.onPrimary
-                                    else -> MaterialTheme.colorScheme.onSurface
-                                }
-                                Box(modifier = Modifier.weight(1f).height(40.dp).padding(2.dp)) {
-                                    Card(modifier = Modifier.fillMaxSize().clickable { onDateSelected(cellCal.time) }.background(bg), colors = CardDefaults.cardColors(containerColor = bg)) {
-                                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                            Text(thisDay.toString(), color = fg)
-                                        }
-                                    }
-                                }
-                                day++
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    })
-}
