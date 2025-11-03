@@ -29,6 +29,12 @@ import androidx.compose.ui.text.style.TextAlign
 import coil.compose.AsyncImage
 import kotlinx.coroutines.launch
 
+import androidx.compose.ui.layout.ContentScale
+import android.util.Base64 as AndroidBase64
+import coil.request.ImageRequest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 @Composable
 fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navController: NavController? = null) {
     val studentResult by profileViewModel.student.collectAsState(initial = null)
@@ -148,21 +154,31 @@ private fun TeacherCard(
      var isSaving by remember { mutableStateOf(false) }
      // Leer la prefs como estado composable (no dentro de coroutines)
      val currentUserData by userPrefsRepo.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
+     // Pre-capturamos el contentResolver en el scope composable para no invocar LocalContext.current dentro del callback
+     val resolver = LocalContext.current.contentResolver
+     // También capturamos el contexto local para usar en ImageRequest y otros callbacks
+     val context = LocalContext.current
      val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
          if (uri != null) {
              // subir foto y actualizar photoUrl
              isUploading = true
-             profileViewModel.uploadPhoto(uri) { url ->
+            profileViewModel.uploadPhotoAsBase64WithResolver(resolver, uri) { url, error ->
                  isUploading = false
                  if (url != null) {
                      photoUrl = url
                      coroutineScope.launch { snackbarHostState.showSnackbar("Foto subida correctamente") }
                  } else {
-                     coroutineScope.launch { snackbarHostState.showSnackbar("No se pudo subir la foto") }
+                     val message = error ?: "No se pudo subir la foto"
+                     coroutineScope.launch { snackbarHostState.showSnackbar(message) }
                  }
              }
          }
      }
+
+    LaunchedEffect(initial?.photoUrl) {
+        // Actualizar el estado local cuando el initial cambie (por ejemplo tras guardado en Firestore)
+        photoUrl = initial?.photoUrl ?: ""
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -183,12 +199,18 @@ private fun TeacherCard(
                     .clickable { launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
                     if (photoUrl.isBlank()) {
                         Text(text = "Foto", textAlign = TextAlign.Center)
+                    } else if (photoUrl.startsWith("data:image")) {
+                        val decodedBytesState = produceState<ByteArray?>(initialValue = null, photoUrl) {
+                            value = try { decodeDataUriToBytes(photoUrl) } catch (_: Exception) { null }
+                        }
+                         if (decodedBytesState.value != null) {
+                            val req = ImageRequest.Builder(context).data(decodedBytesState.value).build()
+                            AsyncImage(model = req, contentDescription = "Avatar", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        } else {
+                            Text(text = "Foto", textAlign = TextAlign.Center)
+                        }
                     } else {
-                        AsyncImage(
-                            model = photoUrl,
-                            contentDescription = "Avatar",
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        AsyncImage(model = photoUrl, contentDescription = "Avatar", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     }
                     // Usar isUploading para mostrar overlay, evitando que la variable quede sin leer
                     if (isUploading) {
@@ -265,17 +287,24 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var photoUrl by remember { mutableStateOf(student.avatarUrl ?: "") }
+    // Pre-capturamos el contentResolver para no invocar APIs composables dentro del callback
+    val resolver = LocalContext.current.contentResolver
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
-            profileViewModel.uploadStudentPhoto(uri) { url ->
+            profileViewModel.uploadStudentPhotoAsBase64WithResolver(resolver, uri) { url, error ->
                 if (url != null) {
                     photoUrl = url
                     coroutineScope.launch { Toast.makeText(context, "Foto subida correctamente", Toast.LENGTH_SHORT).show() }
                 } else {
-                    coroutineScope.launch { Toast.makeText(context, "No se pudo subir la foto", Toast.LENGTH_SHORT).show() }
+                    val message = error ?: "No se pudo subir la foto"
+                    coroutineScope.launch { Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
                 }
             }
         }
+    }
+
+    LaunchedEffect(student.avatarUrl) {
+        photoUrl = student.avatarUrl ?: ""
     }
 
     Card(
@@ -297,8 +326,18 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
                 .clickable { launcher.launch("image/*") }, contentAlignment = Alignment.Center) {
                 if (photoUrl.isBlank()) {
                     Text(text = "Foto", textAlign = TextAlign.Center)
+                } else if (photoUrl.startsWith("data:image")) {
+                    val decodedBytesState = produceState<ByteArray?>(initialValue = null, photoUrl) {
+                        value = try { decodeDataUriToBytes(photoUrl) } catch (_: Exception) { null }
+                    }
+                     if (decodedBytesState.value != null) {
+                        val req = ImageRequest.Builder(context).data(decodedBytesState.value).build()
+                        AsyncImage(model = req, contentDescription = "Avatar", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                     } else {
+                         Text(text = "Foto", textAlign = TextAlign.Center)
+                     }
                 } else {
-                    AsyncImage(model = photoUrl, contentDescription = "Avatar", modifier = Modifier.fillMaxSize())
+                    AsyncImage(model = photoUrl, contentDescription = "Avatar", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -349,5 +388,28 @@ private fun ProfileInfoRow(label: String, value: String) {
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface
         )
+    }
+}
+
+// Helper: decodifica data URI (data:image/...) a ByteArray en dispatcher IO
+suspend fun decodeDataUriToBytes(dataUri: String?): ByteArray? {
+    if (dataUri.isNullOrBlank()) return null
+    val base64Part = dataUri.substringAfter(",", "").replace("\\s".toRegex(), "").trim()
+    if (base64Part.isBlank()) return null
+    return try {
+        withContext(Dispatchers.IO) {
+            try {
+                // Intentar sin saltos de línea primero
+                AndroidBase64.decode(base64Part, AndroidBase64.NO_WRAP)
+            } catch (e: IllegalArgumentException) {
+                try {
+                    AndroidBase64.decode(base64Part, AndroidBase64.DEFAULT)
+                } catch (e2: Exception) {
+                    null
+                }
+            }
+        }
+    } catch (e: Exception) {
+        null
     }
 }

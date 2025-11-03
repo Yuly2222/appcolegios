@@ -1,5 +1,6 @@
 package com.example.appcolegios.perfil
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.appcolegios.data.model.Student
@@ -7,12 +8,20 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import android.net.Uri
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.coroutines.resume
+import android.content.ContentResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.storage.StorageReference
+import com.google.firebase.FirebaseApp
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
+import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import android.provider.OpenableColumns
 
 // Modelo simple para perfil de docente
 data class TeacherProfile(
@@ -23,8 +32,69 @@ data class TeacherProfile(
 )
 
 class ProfileViewModel : ViewModel() {
+    companion object {
+        private const val TAG = "ProfileViewModel"
+    }
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val storage = run {
+        try {
+            val configuredBucket = FirebaseApp.getInstance().options.storageBucket
+            val bucketUrl = if (!configuredBucket.isNullOrBlank()) {
+                if (configuredBucket.startsWith("gs://")) configuredBucket else "gs://$configuredBucket"
+            } else null
+            if (!bucketUrl.isNullOrBlank()) {
+                try {
+                    FirebaseStorage.getInstance(FirebaseApp.getInstance(), bucketUrl)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not initialize FirebaseStorage with bucketUrl=$bucketUrl, falling back to default", e)
+                    FirebaseStorage.getInstance()
+                }
+            } else {
+                FirebaseStorage.getInstance()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error reading FirebaseApp storageBucket, falling back to default storage", e)
+            FirebaseStorage.getInstance()
+        }
+    }
+
+    // Devuelve una lista de StorageReference candidatas para un path dado.
+    private fun candidateRefs(path: String): List<StorageReference> {
+        val refs = mutableListOf<StorageReference>()
+        try {
+            // referencia por defecto (usa el bucket configurado en FirebaseApp)
+            refs.add(storage.reference.child(path))
+        } catch (_: Exception) { }
+
+        try {
+            val configuredBucket = FirebaseApp.getInstance().options.storageBucket
+            if (!configuredBucket.isNullOrBlank()) {
+                var bucket = configuredBucket
+                // si viene sin prefijo gs://, añadir
+                if (bucket.startsWith("gs://")) bucket = bucket.removePrefix("gs://")
+                // variante appspot.com
+                val appspot = if (bucket.contains("firebasestorage.app")) bucket.replace("firebasestorage.app", "appspot.com") else "$bucket"
+                val candidates = listOf(bucket, appspot)
+                for (b in candidates.distinct()) {
+                    try {
+                        val url = if (b.startsWith("gs://")) b else "gs://$b"
+                        val ref = FirebaseStorage.getInstance().getReferenceFromUrl(url).child(path)
+                        refs.add(ref)
+                    } catch (_: Exception) { }
+                    try {
+                        // También intentar la forma HTTPS del endpoint de Storage (firebasestorage.googleapis.com)
+                        val httpsBucket = if (b.startsWith("gs://")) b.removePrefix("gs://") else b
+                        val httpsUrl = "https://firebasestorage.googleapis.com/v0/b/$httpsBucket"
+                        val ref2 = FirebaseStorage.getInstance().getReferenceFromUrl(httpsUrl).child(path)
+                        refs.add(ref2)
+                    } catch (_: Exception) { }
+                }
+            }
+        } catch (_: Exception) { }
+
+        return refs.distinctBy { it.path }
+    }
 
     private val _student = MutableStateFlow<Result<Student?>?>(null)
     val student: StateFlow<Result<Student?>?> = _student
@@ -73,7 +143,13 @@ class ProfileViewModel : ViewModel() {
                     val nombre = doc.getString("name") ?: doc.getString("displayName")
                     val email = doc.getString("email") ?: auth.currentUser?.email
                     val phone = doc.getString("phone")
-                    val photo = doc.getString("photoUrl") ?: doc.getString("avatar")
+                    // Preferir photoBase64 si existe
+                    val photoBase64 = doc.getString("photoBase64")
+                    val photo = if (!photoBase64.isNullOrBlank()) {
+                        "data:image/jpeg;base64,$photoBase64"
+                    } else {
+                        doc.getString("photoUrl") ?: doc.getString("avatar")
+                    }
                     _teacherState.value = Result.success(TeacherProfile(nombre, email, phone, photo))
                     return@launch
                 }
@@ -84,7 +160,12 @@ class ProfileViewModel : ViewModel() {
                     val nombre = userDoc.getString("displayName") ?: userDoc.getString("name")
                     val email = userDoc.getString("email") ?: auth.currentUser?.email
                     val phone = userDoc.getString("phone")
-                    val photo = userDoc.getString("photoUrl") ?: userDoc.getString("avatar")
+                    val photoBase64 = userDoc.getString("photoBase64")
+                    val photo = if (!photoBase64.isNullOrBlank()) {
+                        "data:image/jpeg;base64,$photoBase64"
+                    } else {
+                        userDoc.getString("photoUrl") ?: userDoc.getString("avatar")
+                    }
                     _teacherState.value = Result.success(TeacherProfile(nombre, email, phone, photo))
                     return@launch
                 }
@@ -157,65 +238,466 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    // Subir foto a Firebase Storage y devolver URL.
-    fun uploadPhoto(uri: Uri, onResult: (String?) -> Unit) {
+    // Subir foto a Firebase Storage y devolver URL y mensaje de error (si ocurre)
+    @Suppress("unused")
+    fun uploadPhoto(uri: Uri, onResult: (String?, String?) -> Unit) {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid
-            if (userId == null) { onResult(null); return@launch }
+            if (userId == null) { onResult(null, "Usuario no autenticado"); return@launch }
             try {
-                val ref = FirebaseStorage.getInstance().reference.child("avatars/$userId.jpg")
-                val downloadUrl = suspendCancellableCoroutine<String?> { cont ->
-                    val uploadTask = ref.putFile(uri)
-                    uploadTask.addOnSuccessListener {
-                        ref.downloadUrl.addOnSuccessListener { uri2 -> cont.resume(uri2.toString()) }
-                            .addOnFailureListener { cont.resume(null) }
-                    }.addOnFailureListener {
-                        cont.resume(null)
+                val path = "avatars/$userId.jpg"
+                val refs = candidateRefs(path)
+                // Subir y obtener URL usando await() para tareas de Firebase (más robusto que callbacks manuales)
+                try {
+                    var downloadUrl: String? = null
+                    var succeeded = false
+                    for (r in refs) {
+                        try {
+                            val snap = r.putFile(uri).await()
+                            downloadUrl = snap.storage.downloadUrl.await().toString()
+                            succeeded = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "putFile to candidate ref failed, trying next", e)
+                        }
                     }
-                }
-                if (downloadUrl != null) {
+                    if (!succeeded || downloadUrl == null) throw Exception("All candidate refs failed")
                     // actualizar documento teachers/users con el nuevo photoUrl
                     saveTeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, _teacherState.value?.getOrNull()?.phone, downloadUrl)
+                    onResult(downloadUrl, null)
+                } catch (e: Exception) {
+                    Log.e(TAG, "uploadPhoto failed, trying fallback", e)
+                    // Si falló con "Object does not exist at location", intentar fallback usando otro bucket formado a partir de FirebaseApp options
+                    try {
+                        val configuredBucket = FirebaseApp.getInstance().options.storageBucket
+                        if (!configuredBucket.isNullOrBlank()) {
+                            var altBucket = configuredBucket
+                            if (altBucket.contains("firebasestorage.app")) altBucket = altBucket.replace("firebasestorage.app", "appspot.com")
+                            val altUrl = if (altBucket.startsWith("gs://")) altBucket else "gs://$altBucket"
+                            val altRef = FirebaseStorage.getInstance().getReferenceFromUrl(altUrl).child("avatars/$userId.jpg")
+                            val snapshot2 = altRef.putFile(uri).await()
+                            val download2 = snapshot2.storage.downloadUrl.await().toString()
+                            saveTeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, _teacherState.value?.getOrNull()?.phone, download2)
+                            onResult(download2, null)
+                            return@launch
+                        }
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "uploadPhoto fallback failed", e2)
+                        onResult(null, e2.message ?: e2.toString())
+                        return@launch
+                    }
+                    onResult(null, e.message ?: e.toString())
                 }
-                onResult(downloadUrl)
             } catch (_: Exception) {
-                onResult(null)
+                onResult(null, "Error desconocido al iniciar la subida")
+            }
+        }
+    }
+
+    // Variante que acepta un ContentResolver y hace un intento por putFile, y si falla, usa putStream.
+    fun uploadPhotoWithResolver(contentResolver: ContentResolver, uri: Uri, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid
+            if (userId == null) { onResult(null, "Usuario no autenticado"); return@launch }
+            val path = "avatars/$userId.jpg"
+            val refs = candidateRefs(path)
+            // Primero intentamos putFile
+            try {
+                try {
+                    var succeeded = false
+                    var download: String? = null
+                    for (r in refs) {
+                        try {
+                            r.putFile(uri).await()
+                            download = r.downloadUrl.await().toString()
+                            succeeded = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "putFile (with resolver) to candidate ref failed, trying next", e)
+                        }
+                    }
+                    if (!succeeded || download == null) throw Exception("All candidate refs failed")
+                    saveTeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, _teacherState.value?.getOrNull()?.phone, download)
+                    onResult(download, null)
+                    return@launch
+                } catch (e: Exception) {
+                    Log.w(TAG, "putFile failed, trying putStream", e)
+                }
+
+                // Intentar con stream (útil cuando el URI requiere permisos especiales)
+                val input = try { contentResolver.openInputStream(uri) } catch (e: Exception) { null }
+                if (input == null) {
+                    onResult(null, "No se pudo abrir el archivo para subir")
+                    return@launch
+                }
+                try {
+                    var succeeded = false
+                    var download: String? = null
+                    for (r in refs) {
+                        try {
+                            r.putStream(input).await()
+                            download = r.downloadUrl.await().toString()
+                            succeeded = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "putStream to candidate ref failed, trying next", e)
+                        }
+                    }
+                    if (!succeeded || download == null) throw Exception("All candidate refs failed")
+                    saveTeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, _teacherState.value?.getOrNull()?.phone, download)
+                    onResult(download, null)
+                } catch (e: Exception) {
+                    Log.e(TAG, "putStream failed", e)
+                    onResult(null, e.message ?: e.toString())
+                } finally {
+                    try { input.close() } catch (_: Exception) {}
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "uploadPhotoWithResolver unexpected", e)
+                onResult(null, e.message ?: e.toString())
             }
         }
     }
 
     // Subir foto para estudiante y actualizar en 'students' y 'users'
-    fun uploadStudentPhoto(uri: Uri, onResult: (String?) -> Unit) {
+    @Suppress("unused")
+    fun uploadStudentPhoto(uri: Uri, onResult: (String?, String?) -> Unit) {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid
-            if (userId == null) { onResult(null); return@launch }
+            if (userId == null) { onResult(null, "Usuario no autenticado"); return@launch }
             try {
-                val ref = FirebaseStorage.getInstance().reference.child("avatars/$userId.jpg")
-                val downloadUrl = suspendCancellableCoroutine<String?> { cont ->
-                    val uploadTask = ref.putFile(uri)
-                    uploadTask.addOnSuccessListener {
-                        ref.downloadUrl.addOnSuccessListener { uri2 -> cont.resume(uri2.toString()) }
-                            .addOnFailureListener { cont.resume(null) }
-                    }.addOnFailureListener {
-                        cont.resume(null)
+                val path = "avatars/$userId.jpg"
+                val refs = candidateRefs(path)
+                try {
+                    var downloadUrl: String? = null
+                    var succeeded = false
+                    for (r in refs) {
+                        try {
+                            val snap = r.putFile(uri).await()
+                            downloadUrl = snap.storage.downloadUrl.await().toString()
+                            succeeded = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "putFile to candidate ref failed for student, trying next", e)
+                        }
                     }
-                }
-                if (downloadUrl != null) {
+                    if (!succeeded || downloadUrl == null) throw Exception("All candidate refs failed")
                     // actualizar documento students y users
                     try {
                         db.collection("students").document(userId).set(mapOf("avatarUrl" to downloadUrl), com.google.firebase.firestore.SetOptions.merge()).await()
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) { Log.e(TAG, "update students avatar failed", e) }
                     try {
                         db.collection("users").document(userId).set(mapOf("avatarUrl" to downloadUrl), com.google.firebase.firestore.SetOptions.merge()).await()
-                    } catch (_: Exception) {}
+                    } catch (e: Exception) { Log.e(TAG, "update users avatar failed", e) }
+                    onResult(downloadUrl, null)
+                } catch (e: Exception) {
+                    Log.e(TAG, "uploadStudentPhoto failed, trying fallback", e)
+                    try {
+                        val configuredBucket = FirebaseApp.getInstance().options.storageBucket
+                        if (!configuredBucket.isNullOrBlank()) {
+                            var altBucket = configuredBucket
+                            if (altBucket.contains("firebasestorage.app")) altBucket = altBucket.replace("firebasestorage.app", "appspot.com")
+                            val altUrl = if (altBucket.startsWith("gs://")) altBucket else "gs://$altBucket"
+                            val altRef = FirebaseStorage.getInstance().getReferenceFromUrl(altUrl).child("avatars/$userId.jpg")
+                            val snapshot2 = altRef.putFile(uri).await()
+                            val download2 = snapshot2.storage.downloadUrl.await().toString()
+                            try { db.collection("students").document(userId).set(mapOf("avatarUrl" to download2), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e3: Exception) { Log.e(TAG, "update students avatar failed", e3) }
+                            try { db.collection("users").document(userId).set(mapOf("avatarUrl" to download2), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e3: Exception) { Log.e(TAG, "update users avatar failed", e3) }
+                            onResult(download2, null)
+                            return@launch
+                        }
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "uploadStudentPhoto fallback failed", e2)
+                        onResult(null, e2.message ?: e2.toString())
+                        return@launch
+                    }
+                    onResult(null, e.message ?: e.toString())
                 }
-                onResult(downloadUrl)
             } catch (_: Exception) {
-                onResult(null)
+                onResult(null, "Error desconocido al iniciar la subida")
+            }
+        }
+    }
+
+    // Variante para estudiantes que acepta ContentResolver y usa putFile, con fallback a putStream
+    @Suppress("unused")
+    fun uploadStudentPhotoWithResolver(contentResolver: ContentResolver, uri: Uri, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid
+            if (userId == null) { onResult(null, "Usuario no autenticado"); return@launch }
+            val path = "avatars/$userId.jpg"
+            val refs = candidateRefs(path)
+            try {
+                try {
+                    var succeeded = false
+                    var download: String? = null
+                    for (r in refs) {
+                        try {
+                            r.putFile(uri).await()
+                            download = r.downloadUrl.await().toString()
+                            succeeded = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "putFile (with resolver) to candidate ref failed, trying next", e)
+                        }
+                    }
+                    if (!succeeded || download == null) throw Exception("All candidate refs failed")
+                    try { db.collection("students").document(userId).set(mapOf("avatarUrl" to download), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e: Exception) { Log.e(TAG, "update students avatar failed", e) }
+                    try { db.collection("users").document(userId).set(mapOf("avatarUrl" to download), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e: Exception) { Log.e(TAG, "update users avatar failed", e) }
+                    onResult(download, null)
+                    return@launch
+                } catch (e: Exception) {
+                    Log.w(TAG, "putFile failed, trying putStream", e)
+                }
+
+                val input = try { contentResolver.openInputStream(uri) } catch (e: Exception) { null }
+                if (input == null) { onResult(null, "No se pudo abrir el archivo para subir"); return@launch }
+                try {
+                    var succeeded = false
+                    var download: String? = null
+                    for (r in refs) {
+                        try {
+                            r.putStream(input).await()
+                            download = r.downloadUrl.await().toString()
+                            succeeded = true
+                            break
+                        } catch (e: Exception) {
+                            Log.w(TAG, "putStream to candidate ref failed, trying next", e)
+                        }
+                    }
+                    if (!succeeded || download == null) throw Exception("All candidate refs failed")
+                    try { db.collection("students").document(userId).set(mapOf("avatarUrl" to download), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e: Exception) { Log.e(TAG, "update students avatar failed", e) }
+                    try { db.collection("users").document(userId).set(mapOf("avatarUrl" to download), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e: Exception) { Log.e(TAG, "update users avatar failed", e) }
+                    onResult(download, null)
+                } catch (e: Exception) { Log.e(TAG, "putStream failed for student", e); onResult(null, e.message ?: e.toString()) }
+                finally { try { input.close() } catch (_: Exception) {} }
+            } catch (e: Exception) {
+                Log.e(TAG, "uploadStudentPhotoWithResolver unexpected", e)
+                onResult(null, e.message ?: e.toString())
+            }
+        }
+    }
+
+    // Variante que guarda la imagen como Base64 en Firestore (sin usar Firebase Storage).
+    // Comprime y escala la imagen para intentar que quepa en el límite de 1MB de Firestore.
+    fun uploadPhotoAsBase64WithResolver(contentResolver: ContentResolver, uri: Uri, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid
+            if (userId == null) { onResult(null, "Usuario no autenticado"); return@launch }
+
+            // Verificar tamaño del archivo antes de procesar (evitar trabajo pesado innecesario)
+            val maxInputBytes = 5_000_000L // 5 MB límite de entrada aceptable
+            try {
+                val size = getFileSize(contentResolver, uri)
+                if (size != null && size > maxInputBytes) {
+                    onResult(null, "Archivo demasiado grande: ${size/1_048_576} MB (máx ${maxInputBytes/1_048_576} MB)")
+                    return@launch
+                }
+            } catch (_: Exception) {
+                // Si falla la consulta de tamaño, proseguimos con la conversión (es opcional)
+            }
+
+            try {
+                val base64 = try {
+                    // Realizar las operaciones de decodificación/compress en IO
+                    withContext(Dispatchers.IO) {
+                        // Abrir stream y obtener opciones para muestreo
+                        val input1 = contentResolver.openInputStream(uri) ?: throw Exception("No se pudo abrir el archivo")
+                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeStream(input1, null, options)
+                        try { input1.close() } catch (_: Exception) {}
+
+                        // calcular sampleSize para limitar dimensión máxima (por ejemplo 1024px)
+                        val maxDim = 1024
+                        var sample = 1
+                        val (width, height) = options.outWidth to options.outHeight
+                        if (width > 0 && height > 0) {
+                            while (width / sample > maxDim || height / sample > maxDim) sample *= 2
+                        }
+
+                        val input2 = contentResolver.openInputStream(uri) ?: throw Exception("No se pudo abrir el archivo (2)")
+                        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample }
+                        val bitmap = BitmapFactory.decodeStream(input2, null, decodeOptions) ?: throw Exception("No se pudo decodificar la imagen")
+                        try { input2.close() } catch (_: Exception) {}
+
+                        // Ahora comprimimos iterativamente: bajando calidad y escalando si es necesario
+                        // Usamos un límite de bytes crudos más conservador para que la
+                        // cadena Base64 resultante (que crece ~4/3) no supere el límite
+                        // de 1MiB de Firestore. Elegimos ~700KB para el buffer crudo.
+                        val baos = ByteArrayOutputStream()
+                        var quality = 90
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+                        var bytes = baos.toByteArray()
+
+                        // límite de bytes crudos antes de codificar a Base64 (aprox. 700KB)
+                        val rawLimit = 700_000
+                        while (bytes.size > rawLimit && quality >= 40) {
+                            baos.reset()
+                            quality -= 10
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+                            bytes = baos.toByteArray()
+                        }
+
+                        // Si sigue siendo mayor, escalar el bitmap progresivamente (90% cada iteración)
+                        var currentBitmap = bitmap
+                        while (bytes.size > rawLimit) {
+                            val newWidth = (currentBitmap.width * 0.9).toInt().coerceAtLeast(1)
+                            val newHeight = (currentBitmap.height * 0.9).toInt().coerceAtLeast(1)
+                            val scaled = Bitmap.createScaledBitmap(currentBitmap, newWidth, newHeight, true)
+                            if (scaled != currentBitmap) {
+                                if (currentBitmap != bitmap) currentBitmap.recycle()
+                                currentBitmap = scaled
+                            } else break
+
+                            baos.reset()
+                            // seguir con la calidad actual (mínimo 30)
+                            val q = quality.coerceAtLeast(30)
+                            currentBitmap.compress(Bitmap.CompressFormat.JPEG, q, baos)
+                            bytes = baos.toByteArray()
+
+                            // parada de seguridad: si la imagen es muy pequeña o no mejora, salir
+                            if (currentBitmap.width < 50 || currentBitmap.height < 50) break
+                        }
+
+                        // Liberar bitmaps si fue escalado
+                        if (bitmap != currentBitmap) bitmap.recycle()
+
+                        // Finalmente codificar a Base64 (sin saltos de línea)
+                        Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error al convertir imagen a Base64", e)
+                    throw e
+                }
+
+                // Guardar en Firestore: para docentes actualizamos 'teachers' y 'users'
+                val dataUrl = "data:image/jpeg;base64,$base64"
+                val map = hashMapOf<String, Any?>("photoBase64" to base64, "photoUrl" to dataUrl)
+                try {
+                    db.collection("teachers").document(userId).set(map, com.google.firebase.firestore.SetOptions.merge()).await()
+                } catch (e: Exception) { Log.w(TAG, "No se pudo guardar en 'teachers'", e) }
+                try {
+                    db.collection("users").document(userId).set(map, com.google.firebase.firestore.SetOptions.merge()).await()
+                } catch (e: Exception) { Log.w(TAG, "No se pudo guardar en 'users'", e) }
+
+                // Actualizar estado local para que la UI muestre la dataUrl
+                _teacherState.value = Result.success(TeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, auth.currentUser?.email, _teacherState.value?.getOrNull()?.phone, dataUrl))
+                onResult(dataUrl, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "uploadPhotoAsBase64WithResolver failed", e)
+                onResult(null, e.message ?: e.toString())
+            }
+        }
+    }
+
+    // Versión para estudiantes: guarda avatarBase64 y avatarUrl en 'students' y 'users'
+    fun uploadStudentPhotoAsBase64WithResolver(contentResolver: ContentResolver, uri: Uri, onResult: (String?, String?) -> Unit) {
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid
+            if (userId == null) { onResult(null, "Usuario no autenticado"); return@launch }
+
+            // Verificar tamaño del archivo antes de procesar
+            val maxInputBytes = 5_000_000L // 5 MB
+            try {
+                val size = getFileSize(contentResolver, uri)
+                if (size != null && size > maxInputBytes) {
+                    onResult(null, "Archivo demasiado grande: ${size/1_048_576} MB (máx ${maxInputBytes/1_048_576} MB)")
+                    return@launch
+                }
+            } catch (_: Exception) { }
+
+            try {
+                val base64 = withContext(Dispatchers.IO) {
+                    val input1 = contentResolver.openInputStream(uri) ?: throw Exception("No se pudo abrir el archivo")
+                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeStream(input1, null, options)
+                    try { input1.close() } catch (_: Exception) {}
+
+                    val maxDim = 1024
+                    var sample = 1
+                    val (width, height) = options.outWidth to options.outHeight
+                    if (width > 0 && height > 0) {
+                        while (width / sample > maxDim || height / sample > maxDim) sample *= 2
+                    }
+
+                    val input2 = contentResolver.openInputStream(uri) ?: throw Exception("No se pudo abrir el archivo (2)")
+                    val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sample }
+                    val bitmap = BitmapFactory.decodeStream(input2, null, decodeOptions) ?: throw Exception("No se pudo decodificar la imagen")
+                    try { input2.close() } catch (_: Exception) {}
+
+                    // Ahora comprimimos iterativamente: bajando calidad y escalando si es necesario
+                    // Usamos un límite de bytes crudos más conservador para que la
+                    // cadena Base64 resultante (que crece ~4/3) no supere el límite
+                    // de 1MiB de Firestore. Elegimos ~700KB para el buffer crudo.
+                    val baos = ByteArrayOutputStream()
+                    var quality = 90
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+                    var bytes = baos.toByteArray()
+
+                    // límite de bytes crudos antes de codificar a Base64 (aprox. 700KB)
+                    val rawLimit = 700_000
+                    while (bytes.size > rawLimit && quality >= 40) {
+                        baos.reset()
+                        quality -= 10
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, baos)
+                        bytes = baos.toByteArray()
+                    }
+
+                    // Si sigue siendo mayor, escalar el bitmap progresivamente (90% cada iteración)
+                    var currentBitmap = bitmap
+                    while (bytes.size > rawLimit) {
+                        val newWidth = (currentBitmap.width * 0.9).toInt().coerceAtLeast(1)
+                        val newHeight = (currentBitmap.height * 0.9).toInt().coerceAtLeast(1)
+                        val scaled = Bitmap.createScaledBitmap(currentBitmap, newWidth, newHeight, true)
+                        if (scaled != currentBitmap) {
+                            if (currentBitmap != bitmap) currentBitmap.recycle()
+                            currentBitmap = scaled
+                        } else break
+
+                        baos.reset()
+                        // seguir con la calidad actual (mínimo 30)
+                        val q = quality.coerceAtLeast(30)
+                        currentBitmap.compress(Bitmap.CompressFormat.JPEG, q, baos)
+                        bytes = baos.toByteArray()
+
+                        // parada de seguridad: si la imagen es muy pequeña o no mejora, salir
+                        if (currentBitmap.width < 50 || currentBitmap.height < 50) break
+                    }
+
+                    // Liberar bitmaps si fue escalado
+                    if (bitmap != currentBitmap) bitmap.recycle()
+
+                    Base64.encodeToString(bytes, Base64.NO_WRAP)
+                }
+
+                val dataUrl = "data:image/jpeg;base64,$base64"
+                try { db.collection("students").document(userId).set(mapOf("avatarBase64" to base64, "avatarUrl" to dataUrl), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e: Exception) { Log.w(TAG, "No se pudo guardar en 'students'", e) }
+                try { db.collection("users").document(userId).set(mapOf("avatarBase64" to base64, "avatarUrl" to dataUrl), com.google.firebase.firestore.SetOptions.merge()).await() } catch (e: Exception) { Log.w(TAG, "No se pudo guardar en 'users'", e) }
+
+                onResult(dataUrl, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "uploadStudentPhotoAsBase64WithResolver failed", e)
+                onResult(null, e.message ?: e.toString())
             }
         }
     }
 
     // Helper público para obtener el email current del usuario (UI lo consulta)
     fun getCurrentUserEmail(): String? = auth.currentUser?.email
+
+    // Helper para obtener el tamaño del archivo desde un Uri (si disponible via OpenableColumns)
+    private fun getFileSize(contentResolver: ContentResolver, uri: Uri): Long? {
+        var size: Long? = null
+        val cursor = try { contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null) } catch (e: Exception) { null }
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val idx = it.getColumnIndex(OpenableColumns.SIZE)
+                if (idx != -1) {
+                    val s = it.getLong(idx)
+                    if (s >= 0) size = s
+                }
+            }
+        }
+        return size
+    }
 }
