@@ -3,6 +3,7 @@ package com.example.appcolegios.academico
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -24,87 +25,136 @@ data class Grade(
     val teacher: String
 )
 
+// Datos básicos por hijo para este screen
+data class ChildStudent(
+    val studentName: String,
+    val studentCourse: String,
+    val grades: List<Grade>
+)
+
 @Composable
 fun NotesScreen() {
-    // Notas del estudiante jcamilodiaz7@gmail.com
-    val grades = remember {
+    // Lista de hijos de ejemplo, cada uno con sus propias notas
+    val children = remember {
         listOf(
-            Grade("Matemáticas", "Periodo 1", 4.5, "Excelente desempeño en cálculo", "Herman González"),
-            Grade("Español", "Periodo 1", 4.2, "Buena comprensión lectora", "María López"),
-            Grade("Ciencias", "Periodo 1", 4.8, "Sobresaliente en laboratorios", "Carlos Ruiz"),
-            Grade("Inglés", "Periodo 1", 4.0, "Buen nivel conversacional", "Ana Smith"),
-            Grade("Educación Física", "Periodo 1", 4.6, "Excelente participación", "Pedro Gómez"),
-            Grade("Sociales", "Periodo 1", 4.3, "Buen análisis histórico", "Laura Martínez")
+            ChildStudent(
+                studentName = "Juan Camilo Díaz",
+                studentCourse = "10-A",
+                grades = listOf(
+                    Grade("Matemáticas", "Periodo 1", 4.5, "Excelente desempeño en cálculo", "Herman González"),
+                    Grade("Español", "Periodo 1", 4.2, "Buena comprensión lectora", "María López"),
+                    Grade("Ciencias", "Periodo 1", 4.8, "Sobresaliente en laboratorios", "Carlos Ruiz"),
+                    Grade("Inglés", "Periodo 1", 4.0, "Buen nivel conversacional", "Ana Smith")
+                )
+            ),
+            ChildStudent(
+                studentName = "María Gómez",
+                studentCourse = "8-B",
+                grades = listOf(
+                    Grade("Matemáticas", "Periodo 1", 4.0, "Buen razonamiento", "Hernán Pérez"),
+                    Grade("Español", "Periodo 1", 3.8, "Debe mejorar ortografía", "María López"),
+                    Grade("Ciencias", "Periodo 1", 4.1, "Buen laboratorio", "Carlos Ruiz")
+                )
+            )
         )
     }
 
-    val averageGrade = grades.map { it.grade }.average()
+    // Estado: índice del hijo seleccionado y control del diálogo
+    var selectedChildIndex by remember { mutableStateOf(0) }
+    var showSelectChildDialog by remember { mutableStateOf(false) }
+
+    val grades = children.getOrNull(selectedChildIndex)?.grades ?: emptyList()
+    val averageGrade = if (grades.isEmpty()) 0.0 else grades.map { it.grade }.average()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header con promedio
+        // Header con nombre del estudiante y promedio (clickable para seleccionar hijo)
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showSelectChildDialog = true },
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    "Promedio General",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    String.format(Locale.getDefault(), "%.2f", averageGrade),
-                    style = MaterialTheme.typography.displayLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = when {
-                        averageGrade >= 4.5 -> Color(0xFF4CAF50)
-                        averageGrade >= 4.0 -> Color(0xFF2196F3)
-                        averageGrade >= 3.5 -> Color(0xFFFFC107)
-                        else -> Color(0xFFFF5722)
-                    }
-                )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = when {
-                            averageGrade >= 4.5 -> Icons.Filled.Star
-                            averageGrade >= 4.0 -> Icons.Filled.CheckCircle
-                            else -> Icons.AutoMirrored.Filled.TrendingUp
-                        },
-                        contentDescription = null,
-                        tint = when {
-                            averageGrade >= 4.5 -> Color(0xFF4CAF50)
-                            averageGrade >= 4.0 -> Color(0xFF2196F3)
-                            else -> Color(0xFFFFC107)
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        when {
-                            averageGrade >= 4.5 -> "Excelente"
-                            averageGrade >= 4.0 -> "Sobresaliente"
-                            averageGrade >= 3.5 -> "Aceptable"
-                            else -> "Necesita mejorar"
-                        },
+                        children[selectedChildIndex].studentName,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        "Curso: ${children[selectedChildIndex].studentCourse}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        String.format(Locale.getDefault(), "%.2f", averageGrade),
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = when {
+                            averageGrade >= 4.5 -> Color(0xFF4CAF50)
+                            averageGrade >= 4.0 -> Color(0xFF2196F3)
+                            averageGrade >= 3.5 -> Color(0xFFFFC107)
+                            else -> Color(0xFFFF5722)
+                        }
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.ArrowDropDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
+        }
+
+        // Diálogo de selección de hijo
+        if (showSelectChildDialog) {
+            var selIndex by remember { mutableStateOf(selectedChildIndex) }
+            AlertDialog(
+                onDismissRequest = { showSelectChildDialog = false },
+                title = { Text("Selecciona estudiante") },
+                text = {
+                    Column {
+                        children.forEachIndexed { idx, child ->
+                            Row(modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                                .clickable { selIndex = idx },
+                                verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = selIndex == idx, onClick = { selIndex = idx })
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(child.studentName, fontWeight = FontWeight.SemiBold)
+                                    Text("Curso: ${child.studentCourse}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        selectedChildIndex = selIndex
+                        showSelectChildDialog = false
+                    }) { Text("Aceptar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") }
+                }
+            )
         }
 
         Spacer(Modifier.height(16.dp))

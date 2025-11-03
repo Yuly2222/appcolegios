@@ -33,9 +33,15 @@ class ProfileViewModel : ViewModel() {
     private val _teacherState = MutableStateFlow<Result<TeacherProfile?>?>(null)
     val teacherState: StateFlow<Result<TeacherProfile?>?> = _teacherState
 
+    // Lista de hijos (para padres): se llena buscando students donde acudienteId == currentUid
+    private val _children = MutableStateFlow<List<Student>>(emptyList())
+    @Suppress("unused")
+    val children: StateFlow<List<Student>> = _children
+
     init {
         loadStudentData()
         loadTeacherData()
+        loadChildrenForParent()
     }
 
     private fun loadStudentData() {
@@ -87,6 +93,42 @@ class ProfileViewModel : ViewModel() {
                 _teacherState.value = Result.success(null)
             } catch (e: Exception) {
                 _teacherState.value = Result.failure(e)
+            }
+        }
+    }
+
+    // Cargar hijos asociados al padre actual. Busca en 'students' por 'acudienteId' y por 'acudienteEmail' como fallback.
+    private fun loadChildrenForParent() {
+        viewModelScope.launch {
+            val userId = auth.currentUser?.uid
+            val userEmail = auth.currentUser?.email
+            if (userId == null && userEmail == null) return@launch
+            try {
+                val childrenList = mutableListOf<Student>()
+                // Buscar por acudienteId
+                val byIdQuery = db.collection("students").whereEqualTo("acudienteId", userId).get().await()
+                for (doc in byIdQuery.documents) {
+                    val s = doc.toObject(Student::class.java)
+                    if (s != null) childrenList.add(s)
+                }
+                // Si no encontró nada, intentar por email
+                if (childrenList.isEmpty() && !userEmail.isNullOrBlank()) {
+                    val byEmailQuery = db.collection("students").whereEqualTo("acudienteEmail", userEmail).get().await()
+                    for (doc in byEmailQuery.documents) {
+                        val s = doc.toObject(Student::class.java)
+                        if (s != null) childrenList.add(s)
+                    }
+                }
+                // Actualizar estado
+                _children.value = childrenList
+
+                // Si hay hijos, establecer el primero como student seleccionado por defecto (para mantener compatibilidad con StudentCard)
+                if (childrenList.isNotEmpty()) {
+                    _student.value = Result.success(childrenList[0])
+                }
+            } catch (e: Exception) {
+                // En caso de error solo dejamos la lista vacía
+                _children.value = emptyList()
             }
         }
     }

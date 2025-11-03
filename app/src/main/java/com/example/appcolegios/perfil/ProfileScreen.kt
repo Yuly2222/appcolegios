@@ -87,6 +87,7 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navControlle
                         }
                     }
                 } else {
+                    // Comportamiento original: mostrar studentResult directamente
                     when (val result = studentResult) {
                         null -> {
                             if (isDemo) {
@@ -140,28 +141,28 @@ private fun TeacherCard(
     coroutineScope: kotlinx.coroutines.CoroutineScope,
     userPrefsRepo: UserPreferencesRepository
 ) {
-    var name by remember { mutableStateOf(initial?.nombre ?: "") }
-    var phone by remember { mutableStateOf(initial?.phone ?: "") }
-    var photoUrl by remember { mutableStateOf(initial?.photoUrl ?: "") }
-    var isUploading by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
-    // Leer la prefs como estado composable (no dentro de coroutines)
-    val currentUserData by userPrefsRepo.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        if (uri != null) {
-            // subir foto y actualizar photoUrl
-            isUploading = true
-            profileViewModel.uploadPhoto(uri) { url ->
-                isUploading = false
-                if (url != null) {
-                    photoUrl = url
-                    coroutineScope.launch { snackbarHostState.showSnackbar("Foto subida correctamente") }
-                } else {
-                    coroutineScope.launch { snackbarHostState.showSnackbar("No se pudo subir la foto") }
-                }
-            }
-        }
-    }
+     var name by remember { mutableStateOf(initial?.nombre ?: "") }
+     var phone by remember { mutableStateOf(initial?.phone ?: "") }
+     var photoUrl by remember { mutableStateOf(initial?.photoUrl ?: "") }
+     var isUploading by remember { mutableStateOf(false) }
+     var isSaving by remember { mutableStateOf(false) }
+     // Leer la prefs como estado composable (no dentro de coroutines)
+     val currentUserData by userPrefsRepo.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
+     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+         if (uri != null) {
+             // subir foto y actualizar photoUrl
+             isUploading = true
+             profileViewModel.uploadPhoto(uri) { url ->
+                 isUploading = false
+                 if (url != null) {
+                     photoUrl = url
+                     coroutineScope.launch { snackbarHostState.showSnackbar("Foto subida correctamente") }
+                 } else {
+                     coroutineScope.launch { snackbarHostState.showSnackbar("No se pudo subir la foto") }
+                 }
+             }
+         }
+     }
 
     Card(
         modifier = Modifier.fillMaxWidth(),

@@ -30,6 +30,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.appcolegios.perfil.ProfileViewModel
 
 @Composable
 fun DatePickerCompose(initialDate: Date, onDateSelected: (Date) -> Unit, onDismiss: () -> Unit) {
@@ -142,6 +144,16 @@ fun TasksScreen() {
         else -> false
     }
 
+    // Perfil VM para padres
+    val profileVm: ProfileViewModel = viewModel()
+    val children by profileVm.children.collectAsState()
+    val isParent = (currentUserData.role ?: "").equals("PARENT", ignoreCase = true) || (currentUserData.role ?: "").equals("PADRE", ignoreCase = true)
+    var showSelectChildDialog by remember { mutableStateOf(false) }
+    var selectedChildIndex by remember { mutableStateOf(0) }
+
+    // Si el usuario es padre y tiene un hijo seleccionado, cargaremos los cursos de ese hijo
+    val selectedChildId = children.getOrNull(selectedChildIndex)?.id
+
     // fields for task
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -201,7 +213,7 @@ fun TasksScreen() {
         try {
             val user = auth.currentUser
             val loaded = mutableListOf<CourseSimple>()
-            if (user != null) {
+            if (user != null && !isParent) {
                 val q = firestore.collection("courses").whereEqualTo("teacherId", user.uid).get().await()
                 if (!q.isEmpty) {
                     for (doc in q.documents) {
@@ -224,7 +236,81 @@ fun TasksScreen() {
         }
     }
 
+    // Si es padre y se seleccionó un hijo, cargamos los cursos del hijo
+    LaunchedEffect(selectedChildId) {
+        if (!isParent) return@LaunchedEffect
+        loading = true
+        try {
+            val childId = selectedChildId
+            val loaded = mutableListOf<CourseSimple>()
+            if (childId != null) {
+                val studentDoc = firestore.collection("students").document(childId).get().await()
+                val courseIds = studentDoc.get("courses") as? List<*>
+                if (!courseIds.isNullOrEmpty()) {
+                    for (cid in courseIds) {
+                        val cdoc = firestore.collection("courses").document(cid.toString()).get().await()
+                        if (cdoc.exists()) {
+                            val studentsSnapshot = firestore.collection("courses").document(cdoc.id).collection("students").get().await()
+                            val studs = studentsSnapshot.documents.map { s -> StudentSimple(s.id, s.getString("name") ?: s.getString("displayName") ?: "Alumno") }
+                            loaded.add(CourseSimple(cdoc.id, cdoc.getString("name") ?: "Curso", studs))
+                        }
+                    }
+                } else {
+                    // fallback: buscar cursos por subcollection students
+                    val allCourses = firestore.collection("courses").get().await()
+                    for (doc in allCourses.documents) {
+                        val sdoc = firestore.collection("courses").document(doc.id).collection("students").document(childId).get().await()
+                        if (sdoc.exists()) {
+                            val studs = listOf(StudentSimple(childId, sdoc.getString("name") ?: sdoc.getString("displayName") ?: "Alumno"))
+                            loaded.add(CourseSimple(doc.id, doc.getString("name") ?: "Curso", studs))
+                        }
+                    }
+                }
+            }
+            if (loaded.isEmpty()) {
+                loaded.add(CourseSimple("c1","Demo Curso", listOf(StudentSimple("s1","Alumno A"), StudentSimple("s2","Alumno B"))))
+            }
+            courses = loaded
+            selectedCourse = null
+        } catch (_: Exception) {
+            // ignore
+        } finally {
+            loading = false
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        if (isParent) {
+            // Selector de hijo
+            Card(modifier = Modifier.fillMaxWidth().clickable(enabled = children.isNotEmpty()) { showSelectChildDialog = true }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val name = children.getOrNull(selectedChildIndex)?.nombre ?: "--"
+                    val curso = children.getOrNull(selectedChildIndex)?.curso ?: ""
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("Curso: $curso", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (showSelectChildDialog) {
+                var sel by remember { mutableStateOf(selectedChildIndex) }
+                AlertDialog(onDismissRequest = { showSelectChildDialog = false }, title = { Text("Selecciona estudiante") }, text = {
+                    Column {
+                        if (children.isEmpty()) Text("No hay hijos asociados") else children.forEachIndexed { idx, ch ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { sel = idx }, verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = sel == idx, onClick = { sel = idx })
+                                Spacer(Modifier.width(8.dp))
+                                Column { Text(ch.nombre, fontWeight = FontWeight.SemiBold); Text("Curso: ${ch.curso}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            }
+                        }
+                    }
+                }, confirmButton = { TextButton(onClick = { if (children.isNotEmpty()) selectedChildIndex = sel; showSelectChildDialog = false }) { Text("Aceptar") } }, dismissButton = { TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") } })
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             return@Column
@@ -641,4 +727,3 @@ fun TasksScreen() {
         )
     }
 }
-

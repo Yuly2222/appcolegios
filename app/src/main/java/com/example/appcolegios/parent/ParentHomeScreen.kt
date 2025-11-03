@@ -3,6 +3,7 @@ package com.example.appcolegios.parent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.Assignment
@@ -15,17 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 
-data class ParentDashboardState(
-    val studentName: String = "",
-    val studentGrade: String = "",
-    val recentGrades: List<Grade> = emptyList(),
-    val pendingPayments: List<Payment> = emptyList(),
-    val attendancePercentage: Double = 0.0,
-    val pendingTasks: Int = 0,
-    val notifications: List<ParentNotification> = emptyList(),
-    val loading: Boolean = true
-)
-
+// Restaurar data classes necesarias
 data class Grade(
     val subject: String,
     val grade: Double,
@@ -46,9 +37,35 @@ data class ParentNotification(
     val read: Boolean
 )
 
+// Representación de un hijo con los mismos campos de información
+data class ChildInfo(
+    val studentName: String,
+    val studentGrade: String,
+    val recentGrades: List<Grade> = emptyList(),
+    val pendingPayments: List<Payment> = emptyList(),
+    val attendancePercentage: Double = 0.0,
+    val pendingTasks: Int = 0,
+    val notifications: List<ParentNotification> = emptyList()
+)
+
+data class ParentDashboardState(
+    val studentName: String = "",
+    val studentGrade: String = "",
+    val recentGrades: List<Grade> = emptyList(),
+    val pendingPayments: List<Payment> = emptyList(),
+    val attendancePercentage: Double = 0.0,
+    val pendingTasks: Int = 0,
+    val notifications: List<ParentNotification> = emptyList(),
+    val children: List<ChildInfo> = emptyList(),
+    val selectedChildIndex: Int = 0,
+    val loading: Boolean = true
+)
+
 @Composable
 fun ParentHomeScreen() {
     var state by remember { mutableStateOf(ParentDashboardState()) }
+    // Control del diálogo de selección de hijo
+    var showSelectChildDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         // Cargar datos del padre y estudiante
@@ -70,7 +87,8 @@ fun ParentHomeScreen() {
             item {
                 StudentInfoCard(
                     studentName = state.studentName,
-                    grade = state.studentGrade
+                    grade = state.studentGrade,
+                    onClick = { showSelectChildDialog = true }
                 )
             }
 
@@ -79,7 +97,7 @@ fun ParentHomeScreen() {
                 AcademicSummaryCard(
                     attendancePercentage = state.attendancePercentage,
                     pendingTasks = state.pendingTasks,
-                    averageGrade = state.recentGrades.map { it.grade }.average()
+                    averageGrade = if (state.recentGrades.isEmpty()) 0.0 else state.recentGrades.map { it.grade }.average()
                 )
             }
 
@@ -122,13 +140,66 @@ fun ParentHomeScreen() {
                 NotificationCard(notification)
             }
         }
+
+        // Diálogo para seleccionar otro hijo (fuera del LazyColumn, en contexto composable)
+        if (showSelectChildDialog) {
+            val children = state.children
+            var selectedIndex by remember { mutableStateOf(state.selectedChildIndex) }
+            AlertDialog(
+                onDismissRequest = { showSelectChildDialog = false },
+                title = { Text("Selecciona estudiante") },
+                text = {
+                    Column {
+                        if (children.isEmpty()) {
+                            Text("No hay hijos asociados")
+                        } else {
+                            children.forEachIndexed { index, child ->
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                                    .clickable { selectedIndex = index }) {
+                                    RadioButton(selected = selectedIndex == index, onClick = { selectedIndex = index })
+                                    Spacer(Modifier.width(8.dp))
+                                    Column {
+                                        Text(child.studentName, fontWeight = FontWeight.SemiBold)
+                                        Text("Curso: ${child.studentGrade}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        // Al confirmar, actualizamos el estado con los datos del hijo seleccionado
+                        if (state.children.isNotEmpty()) {
+                            val chosen = state.children[selectedIndex]
+                            state = state.copy(
+                                studentName = chosen.studentName,
+                                studentGrade = chosen.studentGrade,
+                                recentGrades = chosen.recentGrades,
+                                pendingPayments = chosen.pendingPayments,
+                                attendancePercentage = chosen.attendancePercentage,
+                                pendingTasks = chosen.pendingTasks,
+                                notifications = chosen.notifications,
+                                selectedChildIndex = selectedIndex
+                            )
+                        }
+                        showSelectChildDialog = false
+                    }) { Text("Aceptar") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") }
+                }
+            )
+        }
     }
 }
 
 @Composable
-private fun StudentInfoCard(studentName: String, grade: String) {
+private fun StudentInfoCard(studentName: String, grade: String, onClick: () -> Unit) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clickable { onClick() },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer
         )
@@ -157,6 +228,12 @@ private fun StudentInfoCard(studentName: String, grade: String) {
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
@@ -207,7 +284,7 @@ private fun AcademicSummaryCard(
                 SummaryItem(
                     icon = Icons.Filled.Star,
                     label = "Promedio",
-                    value = String.format(java.util.Locale.getDefault(), "%.1f", averageGrade),
+                    value = String.format(Locale.getDefault(), "%.1f", averageGrade),
                     color = Color(0xFF2196F3)
                 )
             }
@@ -381,7 +458,7 @@ private fun NotificationCard(notification: ParentNotification) {
 private fun loadParentDashboardData(): ParentDashboardState {
     return try {
         // Datos de ejemplo - en producción se cargarían de Firestore
-        ParentDashboardState(
+        val child1 = ChildInfo(
             studentName = "Juan Camilo Díaz",
             studentGrade = "10-A",
             recentGrades = listOf(
@@ -399,20 +476,49 @@ private fun loadParentDashboardData(): ParentDashboardState {
             notifications = listOf(
                 ParentNotification(
                     "Reunión de padres",
-                    "Reunión este viernes 20 de enero a las 6:00 PM",
-                    "Hace 2 días",
+                    "Reunión con los docentes de matemáticas",
+                    "2025-03-10",
                     false
-                ),
-                ParentNotification(
-                    "Calificaciones disponibles",
-                    "Las notas del primer periodo ya están disponibles",
-                    "Hace 5 días",
-                    true
                 )
+            )
+        )
+
+        val child2 = ChildInfo(
+            studentName = "María Gómez",
+            studentGrade = "8-B",
+            recentGrades = listOf(
+                Grade("Matemáticas", 4.0, "1"),
+                Grade("Español", 3.8, "1"),
+                Grade("Ciencias", 4.1, "1")
             ),
+            pendingPayments = listOf(
+                Payment("Pensión Marzo", 480000.0, "2025-03-28", "PENDIENTE")
+            ),
+            attendancePercentage = 88.0,
+            pendingTasks = 1,
+            notifications = listOf(
+                ParentNotification(
+                    "Actividad extracurricular",
+                    "María fue seleccionada para el coro escolar",
+                    "2025-03-05",
+                    false
+                )
+            )
+        )
+
+        ParentDashboardState(
+            studentName = child1.studentName,
+            studentGrade = child1.studentGrade,
+            recentGrades = child1.recentGrades,
+            pendingPayments = child1.pendingPayments,
+            attendancePercentage = child1.attendancePercentage,
+            pendingTasks = child1.pendingTasks,
+            notifications = child1.notifications,
+            children = listOf(child1, child2),
+            selectedChildIndex = 0,
             loading = false
         )
-    } catch (_: Exception) {
+    } catch (e: Exception) {
         ParentDashboardState(loading = false)
     }
 }

@@ -44,16 +44,16 @@ class NotificationsViewModel : ViewModel() {
 
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-                var query = db.collection("users").document(userId)
+                val baseQuery = db.collection("users").document(userId)
                     .collection("notifications")
                     .orderBy("fechaHora", Query.Direction.DESCENDING)
 
-                if (cutoffDays != null) {
+                val query = if (cutoffDays != null) {
                     val cal = Calendar.getInstance()
                     cal.add(Calendar.DAY_OF_YEAR, -cutoffDays)
                     val cutoff = com.google.firebase.Timestamp(cal.time)
-                    query = query.whereGreaterThanOrEqualTo("fechaHora", cutoff)
-                }
+                    baseQuery.whereGreaterThanOrEqualTo("fechaHora", cutoff)
+                } else baseQuery
 
                 val snapshot = query.get().await()
 

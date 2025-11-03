@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.appcolegios.perfil.ProfileViewModel
 
 enum class AttendanceStatus {
     PRESENTE, AUSENTE, TARDE, JUSTIFICADO
@@ -48,6 +50,14 @@ fun AttendanceScreen() {
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val role = userData.role ?: ""
+    // Perfil VM para obtener hijos cuando el usuario es padre
+    val profileVm: ProfileViewModel = viewModel()
+    val children by profileVm.children.collectAsState()
+    val isParent = (userData.role ?: "").equals("PARENT", ignoreCase = true) || (userData.role ?: "").equals("PADRE", ignoreCase = true)
+
+    // Estado local para selección de hijo
+    var showSelectChildDialog by remember { mutableStateOf(false) }
+    var selectedChildIndex by remember { mutableStateOf(0) }
 
     var loading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -80,6 +90,8 @@ fun AttendanceScreen() {
                             loadedCourses.add(CourseSimple(courseId, courseName, students))
                         }
                     }
+                } else if (isParent) {
+                    // No cargamos cursos globales aquí; la vista de padre seleccionará un hijo y mostraremos sus registros directamente
                 } else {
                     // Vista estudiante: cargar cursos en los que está inscrito
                     // Intentar leer desde students/{uid} campo 'courses' (lista de ids)
@@ -132,6 +144,91 @@ fun AttendanceScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        // Si es padre, mostrar selector de hijo en la parte superior
+        if (isParent) {
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable(enabled = children.isNotEmpty()) { showSelectChildDialog = true },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val name = if (children.isNotEmpty()) children.getOrNull(selectedChildIndex)?.nombre ?: "--" else "--"
+                    val curso = if (children.isNotEmpty()) children.getOrNull(selectedChildIndex)?.curso ?: "" else ""
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("Curso: $curso", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            // Diálogo para seleccionar hijo
+            if (showSelectChildDialog) {
+                var sel by remember { mutableStateOf(selectedChildIndex) }
+                AlertDialog(onDismissRequest = { showSelectChildDialog = false }, title = { Text("Selecciona estudiante") }, text = {
+                    Column {
+                        if (children.isEmpty()) Text("No hay hijos asociados") else children.forEachIndexed { idx, ch ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { sel = idx }, verticalAlignment = Alignment.CenterVertically) {
+                                RadioButton(selected = sel == idx, onClick = { sel = idx })
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(ch.nombre, fontWeight = FontWeight.SemiBold)
+                                    Text("Curso: ${ch.curso}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                    }
+                }, confirmButton = {
+                    TextButton(onClick = {
+                        if (children.isNotEmpty()) selectedChildIndex = sel
+                        showSelectChildDialog = false
+                    }) { Text("Aceptar") }
+                }, dismissButton = {
+                    TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") }
+                })
+            }
+
+            // Mostrar registros de asistencia para el hijo seleccionado (lectura)
+            val childId = children.getOrNull(selectedChildIndex)?.id
+            if (childId == null) {
+                Text("No hay hijos asociados para mostrar.")
+                return@Column
+            } else {
+                // Cargar registros de asistencia del childId similar a la rama de estudiante
+                var attendanceRecords by remember { mutableStateOf<List<AttendanceRecord>>(emptyList()) }
+                LaunchedEffect(childId) {
+                    attendanceRecords = emptyList()
+                    try {
+                        val query = firestore.collection("attendances").whereEqualTo("studentId", childId)
+                        val snaps = query.get().await()
+                        val list = mutableListOf<AttendanceRecord>()
+                        for (doc in snaps.documents) {
+                            val ts = doc.getTimestamp("date")?.toDate() ?: continue
+                            val raw = (doc.get("records") as? Map<*, *>)?.get(childId) as? String
+                            val status = when (raw?.uppercase()) {
+                                "PRESENTE" -> AttendanceStatus.PRESENTE
+                                "TARDE" -> AttendanceStatus.TARDE
+                                "JUSTIFICADO" -> AttendanceStatus.JUSTIFICADO
+                                else -> AttendanceStatus.AUSENTE
+                            }
+                            val obs = doc.getString("observations") ?: ""
+                            list.add(AttendanceRecord(ts, status, obs))
+                        }
+                        attendanceRecords = list.sortedByDescending { it.date }
+                    } catch (_: Exception) { }
+                }
+
+                if (attendanceRecords.isEmpty()) {
+                    Text("No se encuentran registros de asistencia para este estudiante.")
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(attendanceRecords) { rec -> AttendanceRecordItem(rec) }
+                    }
+                }
+                return@Column
+            }
+        }
+
         if (loading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             return@Column
@@ -253,14 +350,14 @@ fun AttendanceScreen() {
                 LaunchedEffect(course, cutoffDays) {
                      attendanceRecords = emptyList()
                      try {
-                         var query = firestore.collection("attendances").whereEqualTo("courseId", course.id)
-                         if (cutoffDays != null) {
+                         val baseQuery = firestore.collection("attendances").whereEqualTo("courseId", course.id)
+                         val query = if (cutoffDays != null) {
                              val cal = Calendar.getInstance()
                              val days = cutoffDays ?: 0
                              cal.add(Calendar.DAY_OF_YEAR, -days)
                              val cutoff = com.google.firebase.Timestamp(cal.time)
-                             query = query.whereGreaterThanOrEqualTo("date", cutoff)
-                         }
+                             baseQuery.whereGreaterThanOrEqualTo("date", cutoff)
+                         } else baseQuery
                          val snaps = query.get().await()
                          val list = mutableListOf<AttendanceRecord>()
                          for (doc in snaps.documents) {
