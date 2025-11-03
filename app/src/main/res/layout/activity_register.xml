@@ -180,16 +180,6 @@
             app:cornerRadius="12dp"
             app:elevation="2dp" />
 
-        <!-- Enlace a login -->
-        <TextView
-            android:id="@+id/loginLink"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="¿Ya tienes una cuenta? Inicia Sesión"
-            android:textColor="@color/black"
-            android:layout_marginTop="16dp"
-            android:clickable="true"
-            android:focusable="true" />
 
     </LinearLayout>
 </ScrollView>

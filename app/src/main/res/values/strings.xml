@@ -125,6 +125,8 @@
     <string name="dashboard">Dashboard</string>
     <string name="students">Estudiantes</string>
     <string name="teachers">Docentes</string>
+    <string name="panel_admin">Panel Admin</string>
+    <string name="admin">Admin</string>
     <string name="groups">Grupos</string>
     <string name="total_users">Usuarios totales</string>
 
@@ -169,7 +171,7 @@
     <string name="telefono_label">Teléfono:</string>
     <string name="sample_phone">300 123 4567</string>
     <string name="direccion_label">Dirección:</string>
-    <string name="sample_address">Calle 123 #45-67</string>
+    <string name="sample_address">Calle 123 #45–67</string>
     <string name="eps_full">EPS:</string>
     <string name="sample_eps">EPS Salud</string>
     <string name="estado_matricula_full">Estado de matrícula:</string>

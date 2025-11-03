@@ -34,7 +34,8 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         }
         if (state.error != null) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f))) {
-                Text(state.error ?: "", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp))
+                // state.error ya es no-null dentro de este bloque (comprobado arriba), así que no hace falta el elvis
+                Text(state.error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(12.dp))
             }
             Spacer(Modifier.height(12.dp))
             Button(onClick = { vm.refresh() }) { Text(stringResource(R.string.retry)) }

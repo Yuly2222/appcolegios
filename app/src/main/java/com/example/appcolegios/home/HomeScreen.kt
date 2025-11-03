@@ -205,9 +205,10 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
             }
             Role.ADMIN -> {
                 SectionHeader("Administración")
+                // Restaurar accesos: Admin, Dashboard y Perfil
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Admin.route) }) {
-                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Admin") }
+                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.admin)) }
                     }
                     ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Dashboard.route) }) {
                         Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.dashboard)) }

@@ -237,19 +237,6 @@ fun RegisterScreen(
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Botón secundario - azul claro
-            TextButton(
-                onClick = onNavigateToLogin,
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = MaterialTheme.colorScheme.secondary
-                )
-            ) {
-                Text(
-                    "¿Ya tienes una cuenta? Inicia Sesión",
-                    color = MaterialTheme.colorScheme.onSecondary
-                )
-            }
-
             // Mostrar status si existe
             if (status != null) {
                 Spacer(Modifier.height(12.dp))

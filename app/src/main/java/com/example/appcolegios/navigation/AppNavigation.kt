@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.School
@@ -51,8 +50,8 @@ import com.example.appcolegios.auth.LoginActivity
 import com.example.appcolegios.auth.RegisterScreen
 import com.example.appcolegios.auth.ResetPasswordScreen
 import com.example.appcolegios.auth.SplashScreen
-import com.example.appcolegios.dashboard.DashboardScreen
 import com.example.appcolegios.home.HomeScreen
+import com.example.appcolegios.dashboard.DashboardScreen
 import com.example.appcolegios.mensajes.ChatScreen
 import com.example.appcolegios.mensajes.ConversationsScreen
 import com.example.appcolegios.mensajes.NewMessageScreen
@@ -109,7 +108,8 @@ fun AppNavigation(
 
     val bottomItems = if (isAdmin) {
         listOf(
-            BottomItem("Admin", AppRoutes.Admin.route, Icons.Filled.Dashboard),
+            // Para admin, Inicio debe llevar al Home (pantalla de inicio que muestra todas las opciones admin)
+            BottomItem(stringResource(R.string.home), AppRoutes.Home.route, Icons.Filled.Home),
             BottomItem(stringResource(R.string.profile), AppRoutes.Profile.route, Icons.Filled.Person)
         )
     } else {
@@ -195,7 +195,6 @@ fun AppNavigation(
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen() }
-            composable(AppRoutes.Dashboard.route) { DashboardScreen() }
             composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen(navController) }
             composable(AppRoutes.StudentHome.route) { StudentHomeScreen(navController = navController) }
             // Ruta Ubicación del colegio
@@ -224,6 +223,7 @@ fun AppNavigation(
                     }
                 })
             }
+            composable(AppRoutes.Dashboard.route) { DashboardScreen() }
         }
     }
 
@@ -246,9 +246,10 @@ fun AppNavigation(
 
                     // Opción Home / Admin
                     if (isAdmin) {
+                        // Drawer item para administradores: ir a Admin
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Filled.Dashboard, contentDescription = null) },
-                            label = { Text("Panel Admin") },
+                            icon = { Icon(Icons.Filled.Home, contentDescription = null) },
+                            label = { Text(stringResource(R.string.panel_admin)) },
                             selected = currentDestination?.route == AppRoutes.Admin.route,
                             onClick = {
                                 scope.launch { drawerState.close() }
@@ -455,6 +456,7 @@ fun AppNavigation(
                                     AppRoutes.Calendar.route -> stringResource(R.string.calendar)
                                     AppRoutes.TeacherHome.route -> stringResource(R.string.home)
                                     AppRoutes.StudentHome.route -> stringResource(R.string.home)
+                                    AppRoutes.Admin.route -> stringResource(R.string.panel_admin)
                                     AppRoutes.Dashboard.route -> stringResource(R.string.dashboard)
                                     else -> stringResource(R.string.app_name)
                                 }
@@ -516,10 +518,10 @@ fun AppNavigation(
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = {
+                                    // Navegación directa al destino (simple y confiable para evitar problemas desde Admin)
                                     navController.navigate(item.route) {
                                         launchSingleTop = true
                                         restoreState = true
-                                        popUpTo(AppRoutes.Home.route) { saveState = true }
                                     }
                                 },
                                 icon = {
