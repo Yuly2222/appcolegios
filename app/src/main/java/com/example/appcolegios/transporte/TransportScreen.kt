@@ -47,6 +47,10 @@ fun TransportScreen() {
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Estados para el diálogo de confirmación
+    var showConfirmDialog by remember { mutableStateOf(false) }
+    var dialogMode by remember { mutableStateOf<String?>(null) }
+
     // Mantener modo pendiente si el permiso se solicita y luego el usuario lo concede
     var pendingRouteMode by remember { mutableStateOf<String?>(null) }
 
@@ -157,7 +161,6 @@ fun TransportScreen() {
                     scope.launch {
                         try {
                             val uniLatLng = geocodeLocation(context, "Universidad de La Sabana, Chía, Colombia") ?: colegio
-                            // Volvemos al hilo principal (scope.launch ya corre en Main) y actualizamos el mapa
                             map.animateCamera(CameraUpdateFactory.newLatLngZoom(uniLatLng, 15f))
                             map.clear()
                             map.addMarker(MarkerOptions().position(uniLatLng).title("Universidad de La Sabana").icon(BitmapDescriptorFactory.defaultMarker()))
@@ -178,9 +181,11 @@ fun TransportScreen() {
                 RadioButton(
                     selected = seleccionado == medio,
                     onClick = {
+                        // Asignar inmediatamente la nueva selección
                         seleccionado = medio
-                        // Abrir ruta al seleccionar el medio
-                        openRoute(medio)
+                        // Mostrar diálogo de confirmación (no mostramos el modo en el diálogo)
+                        dialogMode = medio
+                        showConfirmDialog = true
                     }
                 )
                 Spacer(Modifier.width(8.dp))
@@ -214,7 +219,6 @@ fun TransportScreen() {
                     val user = auth.currentUser
                     if (user == null) {
                         estado = Estado.Error("Debes iniciar sesión para registrar asistencia")
-                        // opcional: abrir login
                         return@launch
                     }
                     try {
@@ -227,7 +231,6 @@ fun TransportScreen() {
                         db.collection("transportAttendance").add(data).addOnSuccessListener {
                             estado = Estado.Success
                         }.addOnFailureListener { e ->
-                            // Añadir diagnóstico del proyecto y uid para facilitar debugging
                             val projectId = try { com.google.firebase.FirebaseApp.getInstance().options.projectId } catch (_: Exception) { null }
                             val diag = "uid=${user.uid}, project=${projectId ?: "unknown"}"
                             estado = Estado.Error("${e.localizedMessage ?: "Error desconocido"} ($diag)")
@@ -243,17 +246,49 @@ fun TransportScreen() {
             Text("Registrar asistencia")
         }
     }
+
+    // Diálogo de confirmación
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                // Al descartar fuera del diálogo, cerramos y limpiamos estados temporales (no revertimos la selección)
+                dialogMode = null
+                showConfirmDialog = false
+            },
+            title = { Text("Ver ruta y duración") },
+            text = {
+                // No mostrar el modo según tu petición
+                Text("¿Deseas ver la duración del trayecto y la ruta en Google Maps?")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    // Confirmar: la selección ya fue aplicada; ejecutar openRoute
+                    openRoute(dialogMode ?: "")
+                    // limpiar estados temporales
+                    dialogMode = null
+                    showConfirmDialog = false
+                }) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    // Cancelar: cerrar el diálogo y mantener la selección que el usuario dejó marcada
+                    dialogMode = null
+                    showConfirmDialog = false
+                }) { Text("Cancelar") }
+            }
+        )
+    }
 }
 
-private sealed interface Estado {
-    data object Idle : Estado
-    data object Loading : Estado
-    data object Success : Estado
+sealed interface Estado {
+    object Idle : Estado
+    object Loading : Estado
+    object Success : Estado
     data class Error(val mensaje: String) : Estado
 }
 
 // Helper suspend para geocodificar de forma segura según versión de Android
-private suspend fun geocodeLocation(context: Context, locationName: String): LatLng? {
+suspend fun geocodeLocation(context: Context, locationName: String): LatLng? {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         suspendCancellableCoroutine { cont ->
             try {
