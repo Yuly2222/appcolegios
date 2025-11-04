@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -94,7 +96,7 @@ fun GradingScreen() {
                                 Text(course.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                                 Text("${course.students.size} estudiantes", style = MaterialTheme.typography.bodyMedium)
                             }
-                            Icon(Icons.Default.ArrowForward, contentDescription = null)
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
                         }
                     }
                 }
@@ -102,7 +104,7 @@ fun GradingScreen() {
         } else if (selectedStudent == null) {
             val course = selectedCourse!!
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = { selectedCourse = null }) { Icon(Icons.Default.ArrowBack, contentDescription = "Volver") }
+                IconButton(onClick = { selectedCourse = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
                 Text(course.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(8.dp))
@@ -122,11 +124,10 @@ fun GradingScreen() {
             }
         } else {
             val student = selectedStudent!!
-            val course = selectedCourse!!
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = { selectedStudent = null }) { Icon(Icons.Default.ArrowBack, contentDescription = "Volver") }
-                Text(student.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
+             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                 IconButton(onClick = { selectedStudent = null }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
+                 Text(student.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+             }
             Spacer(Modifier.height(8.dp))
 
             // load grades when entering student
