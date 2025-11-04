@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.util.Log
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -103,6 +104,10 @@ class LoginActivity : AppCompatActivity() {
                                 userPrefs.updateUserData(user.uid, role, displayName)
                             } catch (_: Exception) {}
                         }
+
+                        // Mostrar feedback al usuario y log para debugging
+                        Toast.makeText(this@LoginActivity, "¡Logeado exitosamente!", Toast.LENGTH_SHORT).show()
+                        Log.d("LoginActivity", "Logeado exitosamente: uid=${user.uid}, role=$role, displayName=$displayName")
 
                         val startDestination = when (role.uppercase()) {
                             "ADMIN" -> "home"

@@ -915,12 +915,21 @@ private fun AddEventDialog(
                     TextButton(onClick = { openTimePicker() }) { Text("Seleccionar hora") }
                 }
                 Spacer(Modifier.height(8.dp))
-                Row { EventType.entries.forEach { ev ->
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) {
-                        RadioButton(selected = type == ev, onClick = { type = ev })
-                        Text(ev.name)
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    EventType.entries.forEach { ev ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            RadioButton(selected = type == ev, onClick = { type = ev })
+                            Spacer(Modifier.width(8.dp))
+                            Text(ev.name, modifier = Modifier.weight(1f))
+                        }
                     }
-                }}
+                }
+
                 // target course selection for teachers
                 if (role == Role.DOCENTE) {
                     Spacer(Modifier.height(8.dp))
@@ -1006,7 +1015,21 @@ private fun EditEventDialog(event: CalendarEvent, onDismiss: () -> Unit, onSave:
                 TextButton(onClick = { openTimePicker() }) { Text("Seleccionar hora") }
             }
             Spacer(Modifier.height(8.dp))
-            Row { EventType.entries.forEach { ev -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 8.dp)) { RadioButton(selected = type == ev, onClick = { type = ev }); Text(ev.name) } } }
+            Column(modifier = Modifier.fillMaxWidth()) {
+                EventType.entries.forEach { ev ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                    ) {
+                        RadioButton(selected = type == ev, onClick = { type = ev })
+                        Spacer(Modifier.width(8.dp))
+                        Text(ev.name, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+
             // target course selection for teachers
             if (role == Role.DOCENTE) {
                 Spacer(Modifier.height(8.dp))
