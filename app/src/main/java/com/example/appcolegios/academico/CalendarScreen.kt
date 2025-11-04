@@ -41,9 +41,10 @@ import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.with
+import androidx.compose.animation.togetherWith
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.EventNote
+import androidx.compose.runtime.key
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -408,21 +409,23 @@ fun CalendarScreen() {
                 }
             ) {
                 AnimatedContent(targetState = displayedMonth.timeInMillis, transitionSpec = {
-                    slideInHorizontally(initialOffsetX = { fullWidth -> if (targetState > initialState) fullWidth else -fullWidth }, animationSpec = tween(300)) with
+                    slideInHorizontally(initialOffsetX = { fullWidth -> if (targetState > initialState) fullWidth else -fullWidth }, animationSpec = tween(300))
+                        .togetherWith(
                             slideOutHorizontally(targetOffsetX = { fullWidth -> if (targetState > initialState) -fullWidth else fullWidth }, animationSpec = tween(300))
+                        )
                 }) { ts ->
-                    // no-op para marcar uso del parámetro y evitar error
-                    if (ts == Long.MIN_VALUE) { /* noop */ }
-                      CalendarGrid(
-                          displayedMonth = displayedMonth,
-                          selectedDay = selectedDay,
-                          events = events,
-                          onDateSelected = { cal ->
-                              selectedDay = cal
-                              bottomSheetVisible = true
-                          }
-                      )
-                  }
+                       key(ts) {
+                           CalendarGrid(
+                               displayedMonth = displayedMonth,
+                               selectedDay = selectedDay,
+                               events = events,
+                               onDateSelected = { cal ->
+                                   selectedDay = cal
+                                   bottomSheetVisible = true
+                               }
+                           )
+                       }
+                   }
              }
 
             Spacer(Modifier.height(16.dp))
@@ -471,7 +474,7 @@ fun CalendarScreen() {
                 upcomingLastSnapshot = null
                 // pasar los courseIds disponibles (si ya se cargaron) para traer también eventos globales
                 val courseIds = userCourses.map { it.first }
-                loadMoreUpcoming(db, auth, upcomingEvents, role, courseIds) { doc -> upcomingLastSnapshot = doc }
+                loadMoreUpcoming(db, auth, upcomingEvents, courseIds) { doc -> upcomingLastSnapshot = doc }
             }
 
             val displayedUpcoming = if (selectedFilterType == null) upcomingEvents.toList() else upcomingEvents.filter { it.type == selectedFilterType }
@@ -497,7 +500,7 @@ fun CalendarScreen() {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                         val courseIds = userCourses.map { it.first }
                         if (upcomingLastSnapshot != null) {
-                            Button(onClick = { loadMoreUpcoming(db, auth, upcomingEvents, role, courseIds) { doc -> upcomingLastSnapshot = doc } }) { Text("Cargar más") }
+                            Button(onClick = { loadMoreUpcoming(db, auth, upcomingEvents, courseIds) { doc -> upcomingLastSnapshot = doc } }) { Text("Cargar más") }
                         }
                     }
                  }
@@ -1041,7 +1044,7 @@ private fun EditEventDialog(event: CalendarEvent, onDismiss: () -> Unit, onSave:
 }
 
 // helper to load upcoming events paginated
-private fun loadMoreUpcoming(db: FirebaseFirestore, auth: FirebaseAuth, dest: MutableList<CalendarEvent>, _role: Role?, courseIds: List<String> = emptyList(), lastSnapshot: DocumentSnapshot? = null, cbLast: (DocumentSnapshot?) -> Unit) {
+private fun loadMoreUpcoming(db: FirebaseFirestore, auth: FirebaseAuth, dest: MutableList<CalendarEvent>, courseIds: List<String> = emptyList(), lastSnapshot: DocumentSnapshot? = null, cbLast: (DocumentSnapshot?) -> Unit) {
     val uid = auth.currentUser?.uid ?: return
     val col = db.collection("users").document(uid).collection("events")
     val PAGE_SIZE = 25
@@ -1066,8 +1069,6 @@ private fun loadMoreUpcoming(db: FirebaseFirestore, auth: FirebaseAuth, dest: Mu
                 if (d != null) dest.add(CalendarEvent(id, title, description, d, type, EventSource.USER, owner))
             }
             cbLast(docs.lastOrNull())
-            // usar _role para evitar advertencia de parámetro no usado
-            if (_role != null && _role == Role.DOCENTE) { /* noop */ }
              // additionally fetch upcoming global events for user's courses (no strict pagination)
              if (courseIds.isNotEmpty()) {
                  courseIds.chunked(10).forEach { chunk ->
@@ -1087,7 +1088,7 @@ private fun loadMoreUpcoming(db: FirebaseFirestore, auth: FirebaseAuth, dest: Mu
                  }
              }
          }
-     } catch (e: Exception) {
+     } catch (_: Exception) {
          // ignore
          cbLast(null)
      }
