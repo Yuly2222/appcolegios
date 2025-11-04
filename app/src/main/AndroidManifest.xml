@@ -29,7 +29,8 @@
         android:label="@string/app_name"
         android:roundIcon="@drawable/logo"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Appcolegios">
+        android:theme="@style/Theme.Appcolegios"
+        android:name=".MyApplication">
 
         <!-- API key de Google Maps (define @string/google_maps_key) -->
         <meta-data
