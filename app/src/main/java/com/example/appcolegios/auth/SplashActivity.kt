@@ -1,37 +1,38 @@
 package com.example.appcolegios.auth
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.animation.Animation
 import android.view.animation.AnimationUtils
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.example.appcolegios.R
 
+@SuppressLint("CustomSplashScreen")
 class SplashActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_splash)
 
-        // Animación de fade in para el logo
         val logoView: ImageView = findViewById(R.id.splashLogo)
-        val fadeIn: Animation = AnimationUtils.loadAnimation(this, R.anim.fade_in)
-        logoView.startAnimation(fadeIn)
+        // Animación moderna: scale + fade
+        val anim = AnimationUtils.loadAnimation(this, R.anim.splash_preload)
+        logoView.startAnimation(anim)
 
-        // Al terminar la animación, iniciar LoginActivity
-        fadeIn.setAnimationListener(object : Animation.AnimationListener {
-            override fun onAnimationStart(animation: Animation) {}
-            override fun onAnimationRepeat(animation: Animation) {}
-            override fun onAnimationEnd(animation: Animation) {
-                // Retardo breve antes de iniciar
-                Handler(Looper.getMainLooper()).postDelayed({
-                    startActivity(Intent(this@SplashActivity, com.example.appcolegios.auth.LoginActivity::class.java))
-                    finish()
-                }, 300)
+        // Preload fijo de 3 segundos, luego ir a LoginActivity
+        Handler(Looper.getMainLooper()).postDelayed({
+            val next = Intent(this, LoginActivity::class.java)
+            // Preservar data (deep link) y extras si llegan
+            intent?.data?.let { next.data = it }
+            val extras = intent?.extras
+            if (extras != null && !extras.isEmpty) {
+                next.putExtras(extras)
             }
-        })
+            startActivity(next)
+            finish()
+        }, 3000)
     }
 }

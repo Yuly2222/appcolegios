@@ -183,4 +183,5 @@
     <string name="reset_password_title">Recuperar contraseña</string>
     <string name="reset_password_hint">Correo electrónico</string>
     <string name="reset_password_button">Enviar correo</string>
+    <string name="splash_subtitle">Conectando tu colegio</string>
 </resources>
