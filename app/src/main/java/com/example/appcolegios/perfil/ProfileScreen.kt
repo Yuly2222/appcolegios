@@ -293,13 +293,17 @@ private fun AdminCard(onOpenAdmin: () -> Unit, onCreateUser: () -> Unit) {
 
 @Composable
 private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
-    val profileViewModel: ProfileViewModel = viewModel()
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var photoUrl by remember { mutableStateOf(student.avatarUrl ?: "") }
-    // Pre-capturamos el contentResolver para no invocar APIs composables dentro del callback
-    val resolver = LocalContext.current.contentResolver
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+     val profileViewModel: ProfileViewModel = viewModel()
+     val coroutineScope = rememberCoroutineScope()
+     val context = LocalContext.current
+    // Leer nombre registrado en prefs/Firestore (Firebase) para mostrarlo arriba del curso
+    val userPrefsLocal = UserPreferencesRepository(context)
+    val currentUserData by userPrefsLocal.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
+    val displayName = (currentUserData.name ?: student.nombre).trim()
+     var photoUrl by remember { mutableStateOf(student.avatarUrl ?: "") }
+     // Pre-capturamos el contentResolver para no invocar APIs composables dentro del callback
+     val resolver = LocalContext.current.contentResolver
+     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             profileViewModel.uploadStudentPhotoAsBase64WithResolver(resolver, uri) { url, error ->
                 if (url != null) {
@@ -311,7 +315,7 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
                 }
             }
         }
-    }
+     }
 
     LaunchedEffect(student.avatarUrl) {
         photoUrl = student.avatarUrl ?: ""
@@ -353,7 +357,7 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = student.nombre,
+                text = displayName,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

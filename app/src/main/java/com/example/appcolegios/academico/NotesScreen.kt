@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
+import androidx.compose.ui.platform.LocalContext
+import com.example.appcolegios.data.UserPreferencesRepository
 
 data class Grade(
     val subject: String,
@@ -59,9 +61,24 @@ fun NotesScreen() {
         )
     }
 
+    // Leer role / name desde DataStore para condicionar la UI
+    val context = LocalContext.current
+    val userPrefs = UserPreferencesRepository(context)
+    val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
+    val isStudent = (userData.role ?: "").equals("ESTUDIANTE", ignoreCase = true)
+    val currentUserName = (userData.name ?: "").trim()
+
     // Estado: índice del hijo seleccionado y control del diálogo
     var selectedChildIndex by remember { mutableStateOf(0) }
     var showSelectChildDialog by remember { mutableStateOf(false) }
+
+    // Si el usuario es estudiante, fijamos el índice al hijo que coincide por nombre (si existe)
+    LaunchedEffect(currentUserName) {
+        if (isStudent && currentUserName.isNotBlank()) {
+            val idx = children.indexOfFirst { it.studentName.equals(currentUserName, ignoreCase = true) }
+            if (idx != -1) selectedChildIndex = idx
+        }
+    }
 
     val grades = children.getOrNull(selectedChildIndex)?.grades ?: emptyList()
     val averageGrade = if (grades.isEmpty()) 0.0 else grades.map { it.grade }.average()
@@ -73,7 +90,7 @@ fun NotesScreen() {
     ) {
         // Header con nombre del estudiante y promedio (clickable para seleccionar hijo)
         Card(
-            modifier = Modifier
+            modifier = if (isStudent) Modifier.fillMaxWidth() else Modifier
                 .fillMaxWidth()
                 .clickable { showSelectChildDialog = true },
             colors = CardDefaults.cardColors(
@@ -112,17 +129,20 @@ fun NotesScreen() {
                             else -> Color(0xFFFF5722)
                         }
                     )
-                    Icon(
-                        imageVector = Icons.Filled.ArrowDropDown,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
+                    // Mostrar drop-down solo si NO es estudiante (para indicar que se puede cambiar)
+                    if (!isStudent) {
+                        Icon(
+                            imageVector = Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
         }
 
-        // Diálogo de selección de hijo
-        if (showSelectChildDialog) {
+        // Diálogo de selección de hijo (solo para padres/docentes)
+        if (!isStudent && showSelectChildDialog) {
             var selIndex by remember { mutableStateOf(selectedChildIndex) }
             AlertDialog(
                 onDismissRequest = { showSelectChildDialog = false },
