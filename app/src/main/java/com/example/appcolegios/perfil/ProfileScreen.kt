@@ -47,6 +47,10 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navControlle
     val isAdmin = (userDataState.role ?: "").equals("ADMIN", ignoreCase = true)
     val isDocente = (userDataState.role ?: "").equals("DOCENTE", ignoreCase = true)
 
+    // Nuevo: leer rol desde el VM (desde BD)
+    val roleFromDb by profileViewModel.roleString.collectAsState(initial = null)
+    val roleToShow = roleFromDb ?: userDataState.role
+
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val userPrefsRepo = UserPreferencesRepository(LocalContext.current)
@@ -63,6 +67,12 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navControlle
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Mostrar rol visible arriba, para todos los usuarios
+            if (!roleToShow.isNullOrBlank()) {
+                AssistChip(onClick = {}, label = { Text("Rol: ${roleToShow}") })
+                Spacer(Modifier.height(12.dp))
+            }
+
             if (isAdmin) {
                 // Vista simplificada para administradores
                 AdminCard(onOpenAdmin = {
@@ -401,15 +411,15 @@ suspend fun decodeDataUriToBytes(dataUri: String?): ByteArray? {
             try {
                 // Intentar sin saltos de línea primero
                 AndroidBase64.decode(base64Part, AndroidBase64.NO_WRAP)
-            } catch (e: IllegalArgumentException) {
+            } catch (_: IllegalArgumentException) {
                 try {
                     AndroidBase64.decode(base64Part, AndroidBase64.DEFAULT)
-                } catch (e2: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             }
         }
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         null
     }
 }

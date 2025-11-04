@@ -40,6 +40,7 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var enrollmentStatusText: TextView
     private lateinit var averageText: TextView
     private lateinit var academicInfoButton: Button
+    private lateinit var roleText: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +72,9 @@ class ProfileActivity : AppCompatActivity() {
             }
         }
 
+        // Cargar y mostrar rol desde Firestore
+        loadAndShowRole()
+
         loadStudentData()
     }
 
@@ -90,10 +94,46 @@ class ProfileActivity : AppCompatActivity() {
         enrollmentStatusText = findViewById(R.id.enrollmentStatusText)
         averageText = findViewById(R.id.averageText)
         academicInfoButton = findViewById(R.id.academicInfoButton)
+        roleText = findViewById(R.id.roleText)
 
         academicInfoButton.setOnClickListener {
             startActivity(Intent(this, AcademicInfoActivity::class.java))
         }
+    }
+
+    private fun loadAndShowRole() {
+        val uid = auth.currentUser?.uid ?: return
+        firestore.collection("users").document(uid).get()
+            .addOnSuccessListener { udoc ->
+                var roleVal = udoc.getString("role")
+                if (roleVal.isNullOrBlank()) {
+                    val collections = listOf("students", "teachers", "parents", "admins")
+                    var resolved: String? = null
+                    var pending = collections.size
+                    for (c in collections) {
+                        firestore.collection(c).document(uid).get().addOnSuccessListener { d ->
+                            if (resolved == null && d.exists()) {
+                                resolved = d.getString("role") ?: when (c) {
+                                    "students" -> "ESTUDIANTE"
+                                    "teachers" -> "DOCENTE"
+                                    "parents" -> "PADRE"
+                                    "admins" -> "ADMIN"
+                                    else -> null
+                                }
+                                resolved?.let { roleText.text = getString(R.string.role_label, it.uppercase()) }
+                            }
+                        }.addOnCompleteListener {
+                            pending -= 1
+                            if (pending == 0 && resolved == null) {
+                                roleText.text = getString(R.string.role_na)
+                            }
+                        }
+                    }
+                } else {
+                    roleText.text = getString(R.string.role_label, roleVal.uppercase())
+                }
+            }
+            .addOnFailureListener { _ -> roleText.text = getString(R.string.role_na) }
     }
 
     private fun loadStudentData() {
@@ -106,46 +146,44 @@ class ProfileActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
 
                 if (document.exists()) {
-                    // Datos básicos
-                    nameText.text = document.getString("nombre") ?: "No registrado"
-                    courseText.text = "${document.getString("curso") ?: "N/A"} - Grupo ${document.getString("grupo") ?: "N/A"}"
-                    listNumberText.text = document.getLong("numeroLista")?.toString() ?: "No registrado"
+                    nameText.text = document.getString("nombre") ?: getString(R.string.no_student_data)
+                    val curso = document.getString("curso") ?: "N/A"
+                    val grupo = document.getString("grupo") ?: "N/A"
+                    courseText.text = getString(R.string.course_group_format, curso, grupo)
+                    listNumberText.text = document.getLong("numeroLista")?.toString() ?: getString(R.string.no_student_data)
 
-                    // Fecha de nacimiento
                     val birthdate = document.getTimestamp("fechaNacimiento")?.toDate()
                     birthdateText.text = if (birthdate != null) {
                         SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(birthdate)
                     } else {
-                        "No registrado"
+                        getString(R.string.no_student_data)
                     }
 
-                    bloodTypeText.text = document.getString("grupoSanguineo") ?: "No registrado"
-                    emailText.text = document.getString("correoInstitucional") ?: auth.currentUser?.email ?: "No registrado"
+                    bloodTypeText.text = document.getString("grupoSanguineo") ?: getString(R.string.no_student_data)
+                    emailText.text = document.getString("correoInstitucional") ?: auth.currentUser?.email ?: getString(R.string.no_student_data)
 
-                    // Acudiente
                     val guardian = document.getString("acudiente")
-                    guardianText.text = guardian ?: "No registrado"
+                    guardianText.text = guardian ?: getString(R.string.no_student_data)
 
-                    phoneText.text = document.getString("telefono") ?: "No registrado"
-                    addressText.text = document.getString("direccion") ?: "No registrado"
-                    epsText.text = document.getString("eps") ?: "No registrado"
-                    enrollmentStatusText.text = document.getString("estadoMatricula") ?: "Activo"
+                    phoneText.text = document.getString("telefono") ?: getString(R.string.no_student_data)
+                    addressText.text = document.getString("direccion") ?: getString(R.string.no_student_data)
+                    epsText.text = document.getString("eps") ?: getString(R.string.no_student_data)
+                    enrollmentStatusText.text = document.getString("estadoMatricula") ?: getString(R.string.sample_enrollment_status)
 
-                    // Promedio
                     val average = document.getDouble("promedio")
                     averageText.text = if (average != null) {
-                        String.format("%.2f", average)
+                        String.format(Locale.getDefault(), "%.2f", average)
                     } else {
-                        "N/A"
+                        getString(R.string.sample_average)
                     }
 
                 } else {
-                    nameText.text = "Estudiante no encontrado"
+                    nameText.text = getString(R.string.no_student_data)
                 }
             }
             .addOnFailureListener { e ->
                 progressBar.visibility = View.GONE
-                nameText.text = "Error al cargar datos: ${e.message}"
+                nameText.text = getString(R.string.error_label) + ": " + (e.message ?: "")
             }
     }
 }

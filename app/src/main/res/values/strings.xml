@@ -184,4 +184,7 @@
     <string name="reset_password_hint">Correo electrónico</string>
     <string name="reset_password_button">Enviar correo</string>
     <string name="splash_subtitle">Conectando tu colegio</string>
+    <string name="role_label">Rol: %1$s</string>
+    <string name="role_na">Rol: N/A</string>
+    <string name="course_group_format">%1$s - Grupo %2$s</string>
 </resources>

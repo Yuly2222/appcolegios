@@ -63,7 +63,6 @@ class ProfileViewModel : ViewModel() {
     private fun candidateRefs(path: String): List<StorageReference> {
         val refs = mutableListOf<StorageReference>()
         try {
-            // referencia por defecto (usa el bucket configurado en FirebaseApp)
             refs.add(storage.reference.child(path))
         } catch (_: Exception) { }
 
@@ -71,10 +70,8 @@ class ProfileViewModel : ViewModel() {
             val configuredBucket = FirebaseApp.getInstance().options.storageBucket
             if (!configuredBucket.isNullOrBlank()) {
                 var bucket = configuredBucket
-                // si viene sin prefijo gs://, añadir
                 if (bucket.startsWith("gs://")) bucket = bucket.removePrefix("gs://")
-                // variante appspot.com
-                val appspot = if (bucket.contains("firebasestorage.app")) bucket.replace("firebasestorage.app", "appspot.com") else "$bucket"
+                val appspot = if (bucket.contains("firebasestorage.app")) bucket.replace("firebasestorage.app", "appspot.com") else bucket
                 val candidates = listOf(bucket, appspot)
                 for (b in candidates.distinct()) {
                     try {
@@ -83,7 +80,6 @@ class ProfileViewModel : ViewModel() {
                         refs.add(ref)
                     } catch (_: Exception) { }
                     try {
-                        // También intentar la forma HTTPS del endpoint de Storage (firebasestorage.googleapis.com)
                         val httpsBucket = if (b.startsWith("gs://")) b.removePrefix("gs://") else b
                         val httpsUrl = "https://firebasestorage.googleapis.com/v0/b/$httpsBucket"
                         val ref2 = FirebaseStorage.getInstance().getReferenceFromUrl(httpsUrl).child(path)
@@ -108,10 +104,15 @@ class ProfileViewModel : ViewModel() {
     @Suppress("unused")
     val children: StateFlow<List<Student>> = _children
 
+    // Rol del usuario cargado desde Firestore (users y colecciones específicas)
+    private val _roleString = MutableStateFlow<String?>(null)
+    val roleString: StateFlow<String?> = _roleString
+
     init {
         loadStudentData()
         loadTeacherData()
         loadChildrenForParent()
+        loadRoleFromDb()
     }
 
     private fun loadStudentData() {
@@ -137,13 +138,11 @@ class ProfileViewModel : ViewModel() {
                 return@launch
             }
             try {
-                // Intentar colección 'teachers' -> doc uid
                 val doc = db.collection("teachers").document(userId).get().await()
                 if (doc.exists()) {
                     val nombre = doc.getString("name") ?: doc.getString("displayName")
                     val email = doc.getString("email") ?: auth.currentUser?.email
                     val phone = doc.getString("phone")
-                    // Preferir photoBase64 si existe
                     val photoBase64 = doc.getString("photoBase64")
                     val photo = if (!photoBase64.isNullOrBlank()) {
                         "data:image/jpeg;base64,$photoBase64"
@@ -154,7 +153,6 @@ class ProfileViewModel : ViewModel() {
                     return@launch
                 }
 
-                // Fallback: leer collection 'users'
                 val userDoc = db.collection("users").document(userId).get().await()
                 if (userDoc.exists()) {
                     val nombre = userDoc.getString("displayName") ?: userDoc.getString("name")
@@ -170,10 +168,9 @@ class ProfileViewModel : ViewModel() {
                     return@launch
                 }
 
-                // No existe documento: devolver null para que la UI muestre campos vacíos
                 _teacherState.value = Result.success(null)
-            } catch (e: Exception) {
-                _teacherState.value = Result.failure(e)
+            } catch (_: Exception) {
+                _teacherState.value = Result.failure(Exception("Error al cargar perfil docente"))
             }
         }
     }
@@ -247,7 +244,6 @@ class ProfileViewModel : ViewModel() {
             try {
                 val path = "avatars/$userId.jpg"
                 val refs = candidateRefs(path)
-                // Subir y obtener URL usando await() para tareas de Firebase (más robusto que callbacks manuales)
                 try {
                     var downloadUrl: String? = null
                     var succeeded = false
@@ -257,17 +253,13 @@ class ProfileViewModel : ViewModel() {
                             downloadUrl = snap.storage.downloadUrl.await().toString()
                             succeeded = true
                             break
-                        } catch (e: Exception) {
-                            Log.w(TAG, "putFile to candidate ref failed, trying next", e)
+                        } catch (_: Exception) {
                         }
                     }
-                    if (!succeeded || downloadUrl == null) throw Exception("All candidate refs failed")
-                    // actualizar documento teachers/users con el nuevo photoUrl
+                    if (!succeeded) throw Exception("All candidate refs failed")
                     saveTeacherProfile(_teacherState.value?.getOrNull()?.nombre ?: auth.currentUser?.displayName, _teacherState.value?.getOrNull()?.phone, downloadUrl)
                     onResult(downloadUrl, null)
                 } catch (e: Exception) {
-                    Log.e(TAG, "uploadPhoto failed, trying fallback", e)
-                    // Si falló con "Object does not exist at location", intentar fallback usando otro bucket formado a partir de FirebaseApp options
                     try {
                         val configuredBucket = FirebaseApp.getInstance().options.storageBucket
                         if (!configuredBucket.isNullOrBlank()) {
@@ -281,9 +273,8 @@ class ProfileViewModel : ViewModel() {
                             onResult(download2, null)
                             return@launch
                         }
-                    } catch (e2: Exception) {
-                        Log.e(TAG, "uploadPhoto fallback failed", e2)
-                        onResult(null, e2.message ?: e2.toString())
+                    } catch (_: Exception) {
+                        onResult(null, e.message ?: e.toString())
                         return@launch
                     }
                     onResult(null, e.message ?: e.toString())
@@ -699,5 +690,36 @@ class ProfileViewModel : ViewModel() {
             }
         }
         return size
+    }
+
+    private fun loadRoleFromDb() {
+        viewModelScope.launch {
+            val uid = auth.currentUser?.uid ?: return@launch
+            try {
+                // 1) Intentar en users/{uid}
+                val udoc = db.collection("users").document(uid).get().await()
+                var role = udoc.getString("role")
+                if (role.isNullOrBlank()) {
+                    // 2) Fallback por colecciones conocidas
+                    val collections = listOf("students", "teachers", "parents", "admins")
+                    for (coll in collections) {
+                        val d = db.collection(coll).document(uid).get().await()
+                        if (d.exists()) {
+                            role = d.getString("role") ?: when (coll) {
+                                "students" -> "ESTUDIANTE"
+                                "teachers" -> "DOCENTE"
+                                "parents" -> "PADRE"
+                                "admins" -> "ADMIN"
+                                else -> null
+                            }
+                            if (!role.isNullOrBlank()) break
+                        }
+                    }
+                }
+                _roleString.value = role?.uppercase()
+            } catch (_: Exception) {
+                // dejar null si falla
+            }
+        }
     }
 }
