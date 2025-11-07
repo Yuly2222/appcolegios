@@ -582,23 +582,22 @@ fun CalendarScreen(eventId: String? = null) {
                             // Crear notificaciones para estudiantes del curso (solo si el creador no es estudiante)
                             try {
                                 // obtener estudiantes desde subcolección courses/{courseId}/students
-                                targetCourseId?.takeIf { it.isNotBlank() }?.let { tcid ->
-                                    db.collection("courses").document(tcid).collection("students").get()
-                                        .addOnSuccessListener { studsSnap ->
-                                            val studentIds = if (!studsSnap.isEmpty) studsSnap.documents.mapNotNull { it.id } else emptyList()
-                                            if (studentIds.isEmpty()) {
-                                                // fallback: si no hay subcoleccion, intentar buscar en students collection por courseId
-                                                db.collection("students").whereEqualTo("courseId", tcid).get()
-                                                    .addOnSuccessListener { altSnap ->
-                                                        val altIds = altSnap.documents.mapNotNull { it.id }
-                                                        // resolver senderName y crear notifs
-                                                        resolveAndCreateNotifs(altIds, title, description, eventId, db, auth)
-                                                    }
-                                            } else {
-                                                resolveAndCreateNotifs(studentIds, title, description, eventId, db, auth)
-                                            }
+                                val tcid = targetCourseId
+                                db.collection("courses").document(tcid).collection("students").get()
+                                    .addOnSuccessListener { studsSnap ->
+                                        val studentIds = if (!studsSnap.isEmpty) studsSnap.documents.mapNotNull { it.id } else emptyList()
+                                        if (studentIds.isEmpty()) {
+                                            // fallback: si no hay subcoleccion, intentar buscar en students collection por courseId
+                                            db.collection("students").whereEqualTo("courseId", tcid).get()
+                                                .addOnSuccessListener { altSnap ->
+                                                    val altIds = altSnap.documents.mapNotNull { it.id }
+                                                    // resolver senderName y crear notifs
+                                                    resolveAndCreateNotifs(altIds, title, description, eventId, db, auth)
+                                                }
+                                        } else {
+                                            resolveAndCreateNotifs(studentIds, title, description, eventId, db, auth)
                                         }
-                                }
+                                    }
                             } catch (e: Exception) {
                                 Log.w("CalendarScreen", "Error creando notificaciones de curso: ${e.message}")
                             }
@@ -702,7 +701,8 @@ fun CalendarScreen(eventId: String? = null) {
                           }
                           replace(events)
                           replace(upcomingEvents)
-                          showEditEventDialog = false; editingEvent = null
+                          showEditEventDialog = false
+                          editingEvent = null
                       }
                       .addOnFailureListener { ex -> scope.launch { snackbarHostState.showSnackbar("Error actualizando: ${ex.localizedMessage}") } }
              }

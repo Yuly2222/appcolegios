@@ -179,7 +179,7 @@ fun AppNavigation(
                 )
             }
             composable(AppRoutes.Home.route) { HomeScreen(navController = navController) }
-            composable(AppRoutes.Profile.route) { ProfileScreen() }
+            composable(AppRoutes.Profile.route) { ProfileScreen(navController = navController) }
             composable(AppRoutes.Payments.route) { PaymentsScreen() }
             composable(AppRoutes.Transport.route) { TransportScreen() }
             composable(AppRoutes.Notes.route) {

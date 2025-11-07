@@ -1,4 +1,4 @@
-@file:Suppress("RedundantQualifierName", "RemoveRedundantQualifierName", "RedundantQualifiedName", "RedundantQualifier", "UNUSED", "unused")
+@file:Suppress("RedundantQualifierName", "RemoveRedundantQualifierName", "RedundantQualifiedName", "RedundantQualifier", "UNUSED", "unused", "RedundantInitializer")
 
 package com.example.appcolegios.admin
 
@@ -18,6 +18,8 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.nio.charset.Charset
+import java.text.Normalizer
 import kotlinx.coroutines.tasks.await
 import com.example.appcolegios.data.UserData
 import com.example.appcolegios.data.UserPreferencesRepository
@@ -32,13 +34,15 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import org.apache.poi.ss.usermodel.Row
 import com.example.appcolegios.data.TestDataInitializer
-import com.google.firebase.firestore.FieldValue
+import androidx.navigation.NavController
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 
 // Helper local para leer celdas de forma segura
 private fun safeCellValue(row: Row, index: Int): String? = row.getCell(index)?.toString()?.trim()?.takeIf { it.isNotBlank() }
 
 @Composable
-fun AdminScreen() {
+fun AdminScreen(navController: NavController? = null) {
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
     val userData = userPrefs.userData.collectAsState(initial = UserData(null, null, null)).value
@@ -68,14 +72,18 @@ fun AdminScreen() {
                 } catch (_: Exception) {}
 
                 // Intentar inicializar FirebaseApp secundaria (importer) si existe google-services
-                var authImporter: FirebaseAuth? = null
-                try {
+                val authImporter: FirebaseAuth? = try {
                     val opts = FirebaseOptions.fromResource(context)
                     val importerApp = if (opts != null) {
-                        try { FirebaseApp.getInstance("importer") } catch (_: IllegalStateException) { FirebaseApp.initializeApp(context, opts, "importer") }
+                        try {
+                            FirebaseApp.getInstance("importer")
+                        } catch (_: IllegalStateException) {
+                            FirebaseApp.initializeApp(context, opts, "importer")
+                            try { FirebaseApp.getInstance("importer") } catch (_: Exception) { null }
+                        }
                     } else null
-                    authImporter = if (importerApp != null) FirebaseAuth.getInstance(importerApp) else null
-                } catch (_: Exception) { authImporter = null }
+                    if (importerApp != null) FirebaseAuth.getInstance(importerApp) else null
+                } catch (_: Exception) { null }
 
                 try {
                     // Detectar por extensión si es CSV o XLSX
@@ -93,11 +101,11 @@ fun AdminScreen() {
                                     // Soportar dos formatos:
                                     // Formato completo (9 cols): 0 nombre,1 apellidos,2 tipoDoc,3 numeroDoc,4 celular,5 direccion,6 email,7 pass,8 rol
                                     // Formato compacto (>=5 cols): 0 nombre,1 apellidos,2 tipo,3 email,4 role
-                                    val cellCount = row.lastCellNum?.toInt() ?: 0
-                                    var nombre = ""
-                                    var apellidos = ""
-                                    var tipo = ""
-                                    var email = ""
+                                    val cellCount = row.lastCellNum.toInt()
+                                    @Suppress("RedundantInitializer") var nombre = ""
+                                    @Suppress("RedundantInitializer") var apellidos = ""
+                                    @Suppress("RedundantInitializer") var tipo = ""
+                                    @Suppress("RedundantInitializer") var email = ""
                                     var pass: String? = null
                                     var rol = "ESTUDIANTE"
 
@@ -175,7 +183,7 @@ fun AdminScreen() {
                                             } catch (_: Exception) { }
                                             // enviar verificacion de forma asíncrona y esperar
                                             try {
-                                                res.user?.let { it.sendEmailVerification().await() }
+                                                res.user?.sendEmailVerification()?.await()
                                             } catch (_: Exception) { }
                                             // Asegurarse de no dejar al importer autenticado
                                             try { authImporter.signOut() } catch (_: Exception) {}
@@ -223,19 +231,81 @@ fun AdminScreen() {
                             }
                         }
                     } else {
-                        // CSV (mantener comportamiento anterior, con intento de creación si hay password column)
+                        // CSV: usar lector robusto (maneja comillas, BOM y codificación UTF-8/CP1252)
                         context.contentResolver.openInputStream(uri)?.use { input ->
-                            val reader = BufferedReader(InputStreamReader(input))
-                            reader.readLine() // descartar encabezado
-                            var line: String?
+                            // detectar BOM / probar UTF-8 primero
+                            val possibleCharsets = listOf(Charset.forName("UTF-8"), Charset.forName("windows-1252"))
+                            var reader: BufferedReader? = null
+                            for (cs in possibleCharsets) {
+                                try {
+                                    reader = BufferedReader(InputStreamReader(input, cs))
+                                    reader.mark(4096)
+                                    // try to read first line and reset; if decode okay, break
+                                    reader.readLine()
+                                    reader.reset()
+                                    break
+                                } catch (_: Exception) {
+                                    try { reader?.close() } catch (_: Exception) {}
+                                    reader = null
+                                    try { input.reset() } catch (_: Exception) {}
+                                }
+                            }
+                            if (reader == null) reader = BufferedReader(InputStreamReader(input, Charset.forName("UTF-8")))
+
+                            // función auxiliar para parsear línea CSV que respeta comillas
+                            fun parseCsvLine(line: String): List<String> {
+                                val regex = ",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)".toRegex()
+                                return line.split(regex).map { it.trim().trim('"').let { s -> Normalizer.normalize(s, Normalizer.Form.NFC) } }
+                            }
+
+                            // descartar header si existe
+                            var line = reader.readLine() ?: ""
+                            // heurística: si primera línea contiene "name" o "email" considerarla header
+                            if (line.contains("email", true) || line.contains("nombre", true) || line.contains("name", true)) {
+                                // ya descartada
+                            } else {
+                                // procesar esta primera línea también
+                                val parts0 = parseCsvLine(line)
+                                if (parts0.size >= 3) {
+                                    val type = parts0[0].lowercase().trim()
+                                    val email = parts0.getOrNull(1)?.trim() ?: ""
+                                    val nameVal = parts0.getOrNull(2)?.trim() ?: ""
+                                    val parsedRole = when (parts0.getOrNull(3)?.trim()?.uppercase()) {
+                                        "PADRE" -> "PADRE"
+                                        "DOCENTE" -> "DOCENTE"
+                                        "ADMIN" -> "ADMIN"
+                                        else -> "ESTUDIANTE"
+                                    }
+                                    val maybePass = parts0.getOrNull(4)?.trim()?.takeIf { it.isNotBlank() }
+                                    val coll = when (parsedRole) {
+                                        "PADRE" -> "parents"
+                                        "DOCENTE" -> "teachers"
+                                        "ADMIN" -> "admins"
+                                        else -> "students"
+                                    }
+                                    try {
+                                        val display = Normalizer.normalize(nameVal, Normalizer.Form.NFC)
+                                        if (maybePass != null && authImporter != null) {
+                                            val res = authImporter.createUserWithEmailAndPassword(email, maybePass).await()
+                                            val uid = res.user?.uid ?: db.collection(coll).document().id
+                                            db.collection(coll).document(uid).set(hashMapOf("name" to display, "email" to email, "role" to parsedRole, "type" to type, "importedAt" to Timestamp.now())).await()
+                                        } else {
+                                            db.collection(coll).add(hashMapOf("email" to email, "name" to display, "role" to parsedRole, "type" to type, "importedAt" to Timestamp.now())).await()
+                                            db.collection("auth_queue").add(hashMapOf("email" to email, "role" to parsedRole, "displayName" to display, "requestedAt" to Timestamp.now())).await()
+                                        }
+                                        count++
+                                    } catch (_: Exception) {}
+                                }
+                            }
+
                             var localCount = 0
                             while (true) {
                                 line = reader.readLine() ?: break
-                                val parts = line.split(',')
+                                val parts = parseCsvLine(line)
                                 if (parts.size >= 3) {
-                                    val type = parts[0].trim().lowercase()
-                                    val email = parts[1].trim()
-                                    val name = parts[2].trim()
+                                    val type = parts[0].lowercase().trim()
+                                    val email = parts.getOrNull(1)?.trim() ?: ""
+                                    val nameVal = parts.getOrNull(2)?.trim() ?: ""
                                     val parsedRole = when (parts.getOrNull(3)?.trim()?.uppercase()) {
                                         "PADRE" -> "PADRE"
                                         "DOCENTE" -> "DOCENTE"
@@ -251,11 +321,12 @@ fun AdminScreen() {
                                     }
 
                                     try {
+                                        val display = Normalizer.normalize(nameVal, Normalizer.Form.NFC)
                                         if (maybePass != null && authImporter != null) {
                                             val res = authImporter.createUserWithEmailAndPassword(email, maybePass).await()
                                             val uid = res.user?.uid ?: db.collection(coll).document().id
                                             db.collection(coll).document(uid).set(hashMapOf(
-                                                "name" to name,
+                                                "name" to display,
                                                 "email" to email,
                                                 "role" to parsedRole,
                                                 "type" to type,
@@ -264,7 +335,7 @@ fun AdminScreen() {
                                         } else {
                                             db.collection(coll).add(hashMapOf(
                                                 "email" to email,
-                                                "name" to name,
+                                                "name" to display,
                                                 "role" to parsedRole,
                                                 "type" to type,
                                                 "importedAt" to Timestamp.now()
@@ -272,7 +343,7 @@ fun AdminScreen() {
                                             db.collection("auth_queue").add(hashMapOf(
                                                 "email" to email,
                                                 "role" to parsedRole,
-                                                "displayName" to name,
+                                                "displayName" to display,
                                                 "requestedAt" to Timestamp.now()
                                             )).await()
                                         }
@@ -282,7 +353,7 @@ fun AdminScreen() {
                                     }
                                 }
                             }
-                            count = localCount
+                            count += localCount
                         }
                     }
 
@@ -308,22 +379,34 @@ fun AdminScreen() {
             fontWeight = FontWeight.Bold
         )
 
-        // Nueva tarjeta: Registrar usuario
+        // Tarjetas principales: Registrar usuario, Ver perfiles, Gestionar horarios, Crear evento/Notificación
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             ElevatedCard(modifier = Modifier.weight(1f), onClick = {
-                // Lanzar RegisterActivity en modo admin (no afectar sesión)
                 val intent = android.content.Intent(context, RegisterActivity::class.java)
                 intent.putExtra("fromAdmin", true)
                 context.startActivity(intent)
             }) {
-                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("Registrar usuario")
-                }
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Registrar usuario") }
             }
 
-            // Se eliminaron las tarjetas "Accesos Admin" y "Dashboard" para dejar solo la opción de registrar usuario
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.weight(1f))
+            ElevatedCard(modifier = Modifier.weight(1f), onClick = {
+                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminUsers.route)
+            }) {
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Ver perfiles") }
+            }
+
+            ElevatedCard(modifier = Modifier.weight(1f), onClick = {
+                // Ir a la selección de usuarios (luego seleccionar para gestionar horario)
+                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminUsers.route)
+            }) {
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Gestionar horarios") }
+            }
+
+            ElevatedCard(modifier = Modifier.weight(1f), onClick = {
+                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminEventCreate.route)
+            }) {
+                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Crear evento/Notificación") }
+            }
         }
 
         if (status != null) {
