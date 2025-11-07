@@ -57,7 +57,8 @@ fun ConversationsScreen(navController: NavController, conversationsViewModel: Co
             modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).graphicsLayer(scaleX = scale, scaleY = scale),
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            interactionSource = interaction
+            interactionSource = interaction,
+            shape = CircleShape
         ) { Icon(Icons.AutoMirrored.Filled.Message, contentDescription = stringResource(R.string.messages)) }
     }
 }

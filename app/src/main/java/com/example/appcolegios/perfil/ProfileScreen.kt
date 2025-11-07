@@ -19,6 +19,7 @@ import com.example.appcolegios.auth.RegisterActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,6 +73,20 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navControlle
                 AssistChip(onClick = {}, label = { Text("Rol: ${roleToShow}") })
                 Spacer(Modifier.height(12.dp))
             }
+
+            // Botón para forzar recarga manual desde la UI (útil para pruebas)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = {
+                    Log.d("ProfileScreen", "Refrescar button clicked")
+                    profileViewModel.refreshAllData()
+                    // Mostrar snackbar y un Toast para evidenciar visualmente la acción
+                    coroutineScope.launch { snackbarHostState.showSnackbar("Recargando datos...") }
+                    Toast.makeText(context, "Refrescando datos...", Toast.LENGTH_SHORT).show()
+                }) {
+                    Text(text = "Refrescar")
+                }
+            }
+            Spacer(Modifier.height(12.dp))
 
             if (isAdmin) {
                 // Vista simplificada para administradores
@@ -293,13 +308,17 @@ private fun AdminCard(onOpenAdmin: () -> Unit, onCreateUser: () -> Unit) {
 
 @Composable
 private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
-    val profileViewModel: ProfileViewModel = viewModel()
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var photoUrl by remember { mutableStateOf(student.avatarUrl ?: "") }
-    // Pre-capturamos el contentResolver para no invocar APIs composables dentro del callback
-    val resolver = LocalContext.current.contentResolver
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+     val profileViewModel: ProfileViewModel = viewModel()
+     val coroutineScope = rememberCoroutineScope()
+     val context = LocalContext.current
+    // Leer nombre registrado en prefs/Firestore (Firebase) para mostrarlo arriba del curso
+    val userPrefsLocal = UserPreferencesRepository(context)
+    val currentUserData by userPrefsLocal.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
+    val displayName = (currentUserData.name ?: student.nombre).trim()
+     var photoUrl by remember { mutableStateOf(student.avatarUrl ?: "") }
+     // Pre-capturamos el contentResolver para no invocar APIs composables dentro del callback
+     val resolver = LocalContext.current.contentResolver
+     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
             profileViewModel.uploadStudentPhotoAsBase64WithResolver(resolver, uri) { url, error ->
                 if (url != null) {
@@ -311,7 +330,7 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
                 }
             }
         }
-    }
+     }
 
     LaunchedEffect(student.avatarUrl) {
         photoUrl = student.avatarUrl ?: ""
@@ -353,7 +372,7 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text = student.nombre,
+                text = displayName,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface

@@ -120,9 +120,71 @@ class ProfileViewModel : ViewModel() {
             val userId = auth.currentUser?.uid
             if (userId != null) {
                 try {
-                    val document = db.collection("students").document(userId).get().await()
-                    val studentData = document.toObject(Student::class.java) ?: Student()
-                    _student.value = Result.success(studentData)
+                    val studentDoc = db.collection("students").document(userId).get().await()
+                    if (studentDoc.exists()) {
+                        Log.d(TAG, "loadStudentData: found students/$userId")
+                        val studentData = studentDoc.toObject(Student::class.java) ?: Student(id = userId)
+                        // Intentar leer users/{uid} para completar/actualizar curso/grupo si existen allí
+                        try {
+                            val userDoc = db.collection("users").document(userId).get().await()
+                            if (userDoc.exists()) {
+                                val cursoFromUser = userDoc.getString("curso") ?: userDoc.getString("course")
+                                val grupoFromUser = userDoc.getString("grupo") ?: userDoc.getString("group")
+                                // Si alguno de los campos viene en users, los aplicamos sobre studentData
+                                val merged = studentData.copy(
+                                    curso = cursoFromUser ?: studentData.curso,
+                                    grupo = grupoFromUser ?: studentData.grupo
+                                )
+                                Log.d(TAG, "loadStudentData: merged Student from students/$userId + users/$userId -> $merged")
+                                _student.value = Result.success(merged)
+                                return@launch
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "loadStudentData: error reading users/$userId while merging", e)
+                        }
+                        _student.value = Result.success(studentData)
+                    } else {
+                        Log.d(TAG, "loadStudentData: students/$userId not found, trying users/$userId")
+                        // Intentar leer desde users/{uid} cuando no exista students/{uid}
+                        try {
+                            val userDoc = db.collection("users").document(userId).get().await()
+                            if (userDoc.exists()) {
+                                Log.d(TAG, "loadStudentData: found users/$userId, fields: name=${userDoc.getString("name")}, curso=${userDoc.getString("curso")}, grupo=${userDoc.getString("grupo")}, avatarUrlExists=${userDoc.getString("avatarUrl") != null || userDoc.getString("avatarBase64") != null}")
+                                val name = userDoc.getString("name") ?: userDoc.getString("displayName") ?: ""
+                                val curso = userDoc.getString("curso") ?: userDoc.getString("course") ?: ""
+                                val grupo = userDoc.getString("grupo") ?: userDoc.getString("group") ?: ""
+                                // Normalizar avatar: preferir avatarUrl/photoUrl/avatar; si solo hay base64 crudo convertir a data URL
+                                val rawAvatarUrl = userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar")
+                                val avatarBase64 = userDoc.getString("avatarBase64")
+                                val avatar = when {
+                                    !rawAvatarUrl.isNullOrBlank() -> rawAvatarUrl
+                                    !avatarBase64.isNullOrBlank() -> {
+                                        // si ya incluye prefijo data: lo dejamos, si no lo normalizamos a data:image/jpeg
+                                        if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
+                                    }
+                                    else -> null
+                                }
+                                val promedio = try { (userDoc.getDouble("promedio") ?: userDoc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                                val mapped = Student(
+                                    id = userId,
+                                    nombre = name,
+                                    curso = curso,
+                                    grupo = grupo,
+                                    promedio = promedio,
+                                    avatarUrl = avatar
+                                )
+                                Log.d(TAG, "loadStudentData: mapped Student from users/$userId -> $mapped")
+                                _student.value = Result.success(mapped)
+                            } else {
+                                Log.d(TAG, "loadStudentData: users/$userId not found either, returning empty Student")
+                                // Ningún documento encontrado: devolver Student vacío
+                                _student.value = Result.success(Student(id = userId))
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "loadStudentData: error reading users/$userId", e)
+                            _student.value = Result.failure(e)
+                        }
+                    }
                 } catch (e: Exception) {
                     _student.value = Result.failure(e)
                 }
@@ -721,5 +783,22 @@ class ProfileViewModel : ViewModel() {
                 // dejar null si falla
             }
         }
+    }
+
+    // Public: forzar recarga completa de datos de perfil (útil si el ViewModel existía antes de autenticación)
+    fun refreshAllData() {
+        viewModelScope.launch {
+            Log.d(TAG, "refreshAllData: iniciando recarga de student/teacher/children/role")
+            // Llamamos a los métodos privados que inician sus propios coroutines para actualizar los StateFlows
+            loadStudentData()
+            loadTeacherData()
+            loadChildrenForParent()
+            loadRoleFromDb()
+        }
+    }
+
+    // Hacer pública la recarga de datos de estudiante para que la UI pueda forzarla cuando sea necesario
+    fun reloadStudentData() {
+        loadStudentData()
     }
 }
