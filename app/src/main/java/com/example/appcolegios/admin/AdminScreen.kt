@@ -308,22 +308,21 @@ fun AdminScreen() {
             fontWeight = FontWeight.Bold
         )
 
-        // Nueva tarjeta: Registrar usuario
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ElevatedCard(modifier = Modifier.weight(1f), onClick = {
+        // Nueva tarjeta: Registrar usuario (ahora ocupa todo el ancho)
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(84.dp),
+            onClick = {
                 // Lanzar RegisterActivity en modo admin (no afectar sesión)
                 val intent = android.content.Intent(context, RegisterActivity::class.java)
                 intent.putExtra("fromAdmin", true)
                 context.startActivity(intent)
-            }) {
-                Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    Text("Registrar usuario")
-                }
             }
-
-            // Se eliminaron las tarjetas "Accesos Admin" y "Dashboard" para dejar solo la opción de registrar usuario
-            Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.weight(1f))
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Registrar usuario")
+            }
         }
 
         if (status != null) {

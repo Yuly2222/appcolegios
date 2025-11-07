@@ -6,6 +6,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -99,8 +100,8 @@ fun AssignGroupDialog(
         onDismissRequest = { onDismiss() },
         title = { Text("Asignar / Quitar curso y grupo", style = MaterialTheme.typography.titleMedium) },
         text = {
-            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Introduce el email o UID del docente. También puedes importar un CSV con un email por línea para asignación masiva.")
+            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("Introduce el email o UID del docente. También puedes importar un CSV con un email por línea para asignación masiva.", style = MaterialTheme.typography.bodyMedium)
 
                 OutlinedTextField(
                     value = identifier,
@@ -110,55 +111,56 @@ fun AssignGroupDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(value = curso, onValueChange = { curso = it }, label = { Text("Curso (ej. 10)") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(value = grupo, onValueChange = { grupo = it }, label = { Text("Grupo (ej. A)") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
 
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { filePicker.launch(arrayOf("text/*", "text/csv", "text/comma-separated-values")) }, modifier = Modifier.weight(1f)) {
-                        Text("Importar CSV y asignar")
-                    }
-                    OutlinedButton(onClick = { exportLauncher.launch("docentes_export.csv") }, modifier = Modifier.weight(1f)) {
-                        Text("Exportar docentes (CSV)")
-                    }
-                }
-
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = {
-                        if (identifier.isBlank()) { dialogMessage = "Introduce email o uid"; return@OutlinedButton }
-                        dialogLoading = true
-                        dialogMessage = null
-                        scope.launch {
-                            try {
-                                val uid = findUidByIdentifier(db, identifier)
-                                if (uid == null) {
-                                    dialogMessage = "No se encontró docente/usuario con ese email/uid"
-                                } else {
-                                    foundUid = uid
-                                    // leer nombre desde teachers o users (soportar 'nombre' y 'name' y 'displayName')
-                                    val tDoc = try { db.collection("teachers").document(uid).get().await() } catch (_: Exception) { null }
-                                    val uDoc = try { db.collection("users").document(uid).get().await() } catch (_: Exception) { null }
-                                    foundName = try {
-                                        tDoc?.getString("nombre") ?: tDoc?.getString("name") ?: uDoc?.getString("nombre") ?: uDoc?.getString("name") ?: uDoc?.getString("displayName")
-                                    } catch (_: Exception) { null }
-                                    dialogMessage = "Encontrado uid=$uid"
-                                }
-                            } catch (e: Exception) {
-                                dialogMessage = "Error búsqueda: ${e.message}"
-                            } finally {
-                                dialogLoading = false
-                            }
+                Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = { filePicker.launch(arrayOf("text/*", "text/csv", "text/comma-separated-values")) }, modifier = Modifier.weight(1f)) {
+                            Text("Importar CSV y asignar")
                         }
-                    }, modifier = Modifier.weight(1f)) { Text("Buscar") }
+                        OutlinedButton(onClick = { exportLauncher.launch("docentes_export.csv") }, modifier = Modifier.weight(1f)) {
+                            Text("Exportar docentes (CSV)")
+                        }
+                    }
 
-                    // Acción de limpiar los campos de curso/grupo
-                    TextButton(onClick = { curso = ""; grupo = ""; dialogMessage = "Campos curso/grupo limpiados" }, modifier = Modifier.weight(1f)) { Text("Limpiar") }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(onClick = {
+                            if (identifier.isBlank()) { dialogMessage = "Introduce email o uid"; return@OutlinedButton }
+                            dialogLoading = true
+                            dialogMessage = null
+                            scope.launch {
+                                try {
+                                    val uid = findUidByIdentifier(db, identifier)
+                                    if (uid == null) {
+                                        dialogMessage = "No se encontró docente/usuario con ese email/uid"
+                                    } else {
+                                        foundUid = uid
+                                        // leer nombre desde teachers o users (soportar 'nombre' y 'name' y 'displayName')
+                                        val tDoc = try { db.collection("teachers").document(uid).get().await() } catch (_: Exception) { null }
+                                        val uDoc = try { db.collection("users").document(uid).get().await() } catch (_: Exception) { null }
+                                        foundName = try {
+                                            tDoc?.getString("nombre") ?: tDoc?.getString("name") ?: uDoc?.getString("nombre") ?: uDoc?.getString("name") ?: uDoc?.getString("displayName")
+                                        } catch (_: Exception) { null }
+                                        dialogMessage = "Encontrado uid=$uid"
+                                    }
+                                } catch (e: Exception) {
+                                    dialogMessage = "Error búsqueda: ${e.message}"
+                                } finally {
+                                    dialogLoading = false
+                                }
+                            }
+                        }, modifier = Modifier.weight(1f)) { Text("Buscar") }
+
+                        TextButton(onClick = { curso = ""; grupo = ""; dialogMessage = "Campos curso/grupo limpiados" }, modifier = Modifier.weight(1f)) { Text("Limpiar") }
+                    }
                 }
 
                 if (!foundName.isNullOrBlank()) Text("Docente: ${foundName} (uid=${foundUid})", style = MaterialTheme.typography.bodyMedium)
-                if (!dialogMessage.isNullOrBlank()) Text(dialogMessage!!, style = MaterialTheme.typography.bodySmall)
-                if (dialogLoading) CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
+                if (!dialogMessage.isNullOrBlank()) Text(dialogMessage!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (dialogLoading) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         },
         confirmButton = {
@@ -190,11 +192,26 @@ fun AssignGroupDialog(
                             if (uid == null) {
                                 dialogMessage = "No se encontró usuario/docente"
                             } else {
-                                // eliminar campos curso/grupo
-                                db.collection("teachers").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
-                                try { db.collection("users").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
-                                dialogMessage = "Curso y grupo eliminados del perfil"
-                            }
+                                val groupKeyLocal = if (curso.isBlank() || grupo.isBlank()) null else ("${curso.trim()}-${grupo.trim()}")
+                                if (groupKeyLocal != null) {
+                                    // eliminar solo ese grupo del array 'grupos'
+                                    db.collection("teachers").document(uid).update(mapOf("grupos" to FieldValue.arrayRemove(groupKeyLocal))).await()
+                                    try { db.collection("users").document(uid).update(mapOf("grupos" to FieldValue.arrayRemove(groupKeyLocal))).await() } catch (_: Exception) {}
+                                    // también, si curso/grupo actuales coinciden con este grupo, eliminarlos
+                                    val doc = db.collection("teachers").document(uid).get().await()
+                                    val currentCurso = doc.getString("curso")
+                                    if (currentCurso == groupKeyLocal) {
+                                        db.collection("teachers").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
+                                        try { db.collection("users").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
+                                    }
+                                    dialogMessage = "Grupo $groupKeyLocal eliminado del perfil"
+                                } else {
+                                    // eliminar todo el campo 'grupos' y campos legacy
+                                    db.collection("teachers").document(uid).update(mapOf("grupos" to FieldValue.delete(), "curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
+                                    try { db.collection("users").document(uid).update(mapOf("grupos" to FieldValue.delete(), "curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
+                                    dialogMessage = "Todos los grupos eliminados del perfil"
+                                }
+                             }
                         } catch (e: Exception) {
                             dialogMessage = "Error quitando: ${e.message}"
                         } finally {
@@ -288,13 +305,13 @@ suspend fun assignToCourseAndGroup(db: FirebaseFirestore, identifier: String, cu
     } catch (_: Exception) { }
 
     // construir valores
-    val cursoVal = if (curso.isBlank() || grupo.isBlank()) null else ("${curso.trim()}-${grupo.trim()}")
+    val groupKey = if (curso.isBlank() || grupo.isBlank()) null else ("${curso.trim()}-${grupo.trim()}")
     try {
-        if (cursoVal == null) {
-            // si no se proporcionó ambos, solo escribir separado si uno está presente
+        if (groupKey == null) {
+            // Si no se proporcionó ambos: solo actualizar campos simples (backward compatibility)
             val updates = mutableMapOf<String, Any>()
-            if (curso.isNotBlank()) updates["curso"] = curso
-            if (grupo.isNotBlank()) updates["grupo"] = grupo
+            if (curso.isNotBlank()) updates["curso"] = curso.trim()
+            if (grupo.isNotBlank()) updates["grupo"] = grupo.trim()
             if (providedEmail != null) updates["email"] = providedEmail
             if (!nameCandidate.isNullOrBlank()) {
                 updates["name"] = nameCandidate
@@ -305,11 +322,13 @@ suspend fun assignToCourseAndGroup(db: FirebaseFirestore, identifier: String, cu
                 try { db.collection("users").document(uidToUse).set(updates, com.google.firebase.firestore.SetOptions.merge()).await() } catch (_: Exception) {}
             }
         } else {
-            val map = hashMapOf<String, Any?>("curso" to cursoVal, "curso_simple" to curso.trim(), "grupo" to grupo.trim())
-            if (providedEmail != null) map["email"] = providedEmail
-            if (!nameCandidate.isNullOrBlank()) { map["name"] = nameCandidate; map["displayName"] = nameCandidate }
-            db.collection("teachers").document(uidToUse).set(map, com.google.firebase.firestore.SetOptions.merge()).await()
-            try { db.collection("users").document(uidToUse).set(map, com.google.firebase.firestore.SetOptions.merge()).await() } catch (_: Exception) {}
+            // Añadir el grupo al array 'grupos' (strings tipo "10-A") y mantener campos 'curso'/'grupo' como último asignado
+            db.collection("teachers").document(uidToUse).update(mapOf("grupos" to FieldValue.arrayUnion(groupKey))).await()
+            val localMap = hashMapOf<String, Any?>("curso" to groupKey, "curso_simple" to curso.trim(), "grupo" to grupo.trim())
+            if (providedEmail != null) localMap["email"] = providedEmail
+            if (!nameCandidate.isNullOrBlank()) { localMap["name"] = nameCandidate; localMap["displayName"] = nameCandidate }
+            db.collection("teachers").document(uidToUse).set(localMap, com.google.firebase.firestore.SetOptions.merge()).await()
+            try { db.collection("users").document(uidToUse).set(localMap, com.google.firebase.firestore.SetOptions.merge()).await() } catch (_: Exception) {}
         }
         return true
     } catch (e: Exception) {
