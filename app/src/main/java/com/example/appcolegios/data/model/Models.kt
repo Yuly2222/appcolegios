@@ -60,7 +60,11 @@ data class Notification(
     val senderName: String? = null,
     val fechaHora: Date = Date(0),
     val avatarUrl: String? = null,
-    val leida: Boolean = false
+    val leida: Boolean = false,
+    // campo opcional para distinguir tipo de notificación (p.ej. "evento")
+    val tipo: String? = null,
+    // id relacionado (por ejemplo eventId) para navegar desde notificación hacia recurso
+    val relatedId: String? = null
 )
 
 data class Message(

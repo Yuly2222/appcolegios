@@ -51,6 +51,7 @@ import java.time.ZoneId
 import java.time.temporal.WeekFields
 import com.google.firebase.firestore.DocumentSnapshot
 import java.util.Locale
+ import kotlinx.coroutines.tasks.await
 
 enum class EventSource { USER, GLOBAL }
 
@@ -70,7 +71,7 @@ enum class EventType {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
-fun CalendarScreen() {
+fun CalendarScreen(eventId: String? = null) {
     // Separamos mes mostrado y fecha seleccionada
     var displayedMonth by remember { mutableStateOf(Calendar.getInstance()) }
     var selectedDay by remember { mutableStateOf<Calendar?>(Calendar.getInstance()) }
@@ -581,8 +582,7 @@ fun CalendarScreen() {
                             // Crear notificaciones para estudiantes del curso (solo si el creador no es estudiante)
                             try {
                                 // obtener estudiantes desde subcolección courses/{courseId}/students
-                                val tcid = targetCourseId
-                                if (!tcid.isNullOrBlank()) {
+                                targetCourseId?.takeIf { it.isNotBlank() }?.let { tcid ->
                                     db.collection("courses").document(tcid).collection("students").get()
                                         .addOnSuccessListener { studsSnap ->
                                             val studentIds = if (!studsSnap.isEmpty) studsSnap.documents.mapNotNull { it.id } else emptyList()
@@ -708,6 +708,52 @@ fun CalendarScreen() {
              }
          }, role = role, userCourses = userCourses.toList())
       }
+
+    // After listeners are set up, if an eventId was provided attempt to locate and select it
+    LaunchedEffect(eventId) {
+        if (eventId.isNullOrBlank()) return@LaunchedEffect
+        // try to find locally first
+        val found = events.find { it.id == eventId }
+        if (found != null) {
+            selectedDay = Calendar.getInstance().apply { time = found.date }
+            bottomSheetVisible = true
+        } else {
+            // try to fetch from top-level events
+            try {
+                val doc = db.collection("events").document(eventId).get().await()
+                if (doc.exists()) {
+                    val title = doc.getString("title") ?: "Evento"
+                    val description = doc.getString("description") ?: ""
+                    val ts = doc.get("date")
+                    val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
+                    val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
+                    if (d != null) {
+                        selectedDay = Calendar.getInstance().apply { time = d }
+                        events.add(CalendarEvent(eventId, title, description, d, type, EventSource.GLOBAL, doc.getString("courseId")))
+                        bottomSheetVisible = true
+                    }
+                } else {
+                    // try users/{uid}/events
+                    val uid = auth.currentUser?.uid
+                    if (!uid.isNullOrBlank()) {
+                        val ud = db.collection("users").document(uid).collection("events").document(eventId).get().await()
+                        if (ud.exists()) {
+                            val title = ud.getString("title") ?: "Evento"
+                            val description = ud.getString("description") ?: ""
+                            val ts = ud.get("date")
+                            val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
+                            val type = try { EventType.valueOf(ud.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
+                            if (d != null) {
+                                selectedDay = Calendar.getInstance().apply { time = d }
+                                events.add(CalendarEvent(eventId, title, description, d, type, EventSource.USER, uid))
+                                bottomSheetVisible = true
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+    }
 }
 
 // Generador simple de ocurrencias para recurrencia básica

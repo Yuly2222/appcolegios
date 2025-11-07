@@ -24,9 +24,10 @@ import com.example.appcolegios.data.model.Notification
 import com.example.appcolegios.util.DateFormats
 import kotlinx.coroutines.launch
 import com.example.appcolegios.demo.DemoData
+import androidx.navigation.NavController
 
 @Composable
-fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewModel()) {
+fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewModel(), navController: NavController? = null) {
     val uiState by notificationsViewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
 
@@ -80,6 +81,16 @@ fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewMod
                                 groupedNotifications = dataToShow,
                                 onNotificationClick = { notification ->
                                     scope.launch { notificationsViewModel.markAsRead(notification.id) }
+                                    // Si es evento, abrir calendario y (opcional) buscar evento
+                                    if (notification.tipo == "evento") {
+                                        // si la notificación tiene relatedId (eventId) navegamos a la ruta específica
+                                        val evId = notification.relatedId
+                                        if (!evId.isNullOrBlank()) {
+                                            navController?.navigate(com.example.appcolegios.navigation.AppRoutes.CalendarEvent.route.replace("{eventId}", evId))
+                                        } else {
+                                            navController?.navigate(com.example.appcolegios.navigation.AppRoutes.Calendar.route)
+                                        }
+                                    }
                                 }
                             )
                         }

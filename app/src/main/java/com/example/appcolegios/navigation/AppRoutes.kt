@@ -27,4 +27,12 @@ sealed class AppRoutes(val route: String) {
     object Chat : AppRoutes("chat/{otherUserId}")
     object NewMessage : AppRoutes("new_message")
     object Ubicacion : AppRoutes("ubicacion")
+
+    // Admin helpers
+    object AdminUsers : AppRoutes("admin_users")
+    object AdminScheduleManage : AppRoutes("admin_schedule/{userId}")
+    object AdminEventCreate : AppRoutes("admin_event_create")
+
+    // Calendar deep link to open specific event
+    object CalendarEvent : AppRoutes("calendar/{eventId}")
 }

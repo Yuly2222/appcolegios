@@ -61,6 +61,7 @@ import com.example.appcolegios.pagos.PaymentsScreen
 import com.example.appcolegios.perfil.ProfileScreen
 import com.example.appcolegios.transporte.TransportScreen
 import com.example.appcolegios.admin.AdminScreen
+import com.example.appcolegios.admin.AdminUsersScreen
 import com.example.appcolegios.ubicacion.UbicacionScreen
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
@@ -193,11 +194,17 @@ fun AppNavigation(
             composable(AppRoutes.Tasks.route) { TasksScreen() }
             // Ruta para calificar (Cursos -> Estudiantes -> Notas)
             composable(AppRoutes.Grading.route) { com.example.appcolegios.academico.GradingScreen() }
-            composable(AppRoutes.Notifications.route) { NotificationsScreen() }
+            composable(AppRoutes.Notifications.route) { NotificationsScreen(navController = navController) }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Schedule.route) { ScheduleScreen() }
-            composable(AppRoutes.Admin.route) { AdminScreen() }
+            composable(AppRoutes.Admin.route) { AdminScreen(navController) }
+            composable(AppRoutes.AdminUsers.route) { AdminUsersScreen(onUserSelected = { uid ->
+                // navegar a gestión de horario del usuario seleccionado
+                navController.navigate(com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", uid))
+            }) }
+            composable(AppRoutes.AdminEventCreate.route) { com.example.appcolegios.admin.AdminEventCreateScreen(navController)
+            }
             composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen(navController) }
             composable(AppRoutes.StudentHome.route) { StudentHomeScreen(navController = navController) }
             // Ruta Ubicación del colegio
@@ -227,6 +234,20 @@ fun AppNavigation(
                 })
             }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
+            composable(
+                route = com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route,
+                arguments = listOf(navArgument("userId") { type = NavType.StringType; defaultValue = "" })
+            ) { backStackEntry ->
+                val uid = backStackEntry.arguments?.getString("userId")
+                com.example.appcolegios.admin.AdminScheduleManageScreen(userIdArg = uid, onDone = { navController.popBackStack() })
+            }
+            composable(
+                route = AppRoutes.CalendarEvent.route,
+                arguments = listOf(navArgument("eventId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val eid = backStackEntry.arguments?.getString("eventId") ?: ""
+                CalendarScreen(eventId = eid)
+            }
         }
     }
 

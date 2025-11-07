@@ -86,7 +86,7 @@ fun ChatScreen(
                 .padding(horizontal = 8.dp),
             reverseLayout = true
         ) {
-            items(uiState.messages.reversed()) { message ->
+            items(items = uiState.messages.reversed(), key = { it.id }) { message ->
                 MessageBubble(message = message, isFromCurrentUser = message.fromId == currentUserId)
             }
         }
@@ -108,6 +108,7 @@ fun MessageBubble(message: Message, isFromCurrentUser: Boolean) {
                     shape = RoundedCornerShape(12.dp)
                 )
                 .padding(horizontal = 12.dp, vertical = 8.dp)
+                .widthIn(max = 280.dp)
         ) {
             Text(
                 text = message.texto,
