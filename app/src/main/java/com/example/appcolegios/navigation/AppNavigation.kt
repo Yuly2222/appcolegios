@@ -44,6 +44,7 @@ import com.example.appcolegios.R
 import com.example.appcolegios.academico.AttendanceScreen
 import com.example.appcolegios.academico.AnnouncementsScreen
 import com.example.appcolegios.academico.CalendarScreen
+import com.example.appcolegios.academico.ScheduleScreen
 import com.example.appcolegios.academico.NotesScreen
 import com.example.appcolegios.academico.TasksScreen
 import com.example.appcolegios.auth.LoginActivity
@@ -117,6 +118,7 @@ fun AppNavigation(
             BottomItem(stringResource(R.string.home), AppRoutes.Home.route, Icons.Filled.Home),
             BottomItem(stringResource(R.string.messages), AppRoutes.Messages.route, Icons.AutoMirrored.Filled.Message),
             BottomItem(stringResource(R.string.notifications), AppRoutes.Notifications.route, Icons.Filled.Notifications),
+            BottomItem(stringResource(R.string.schedule), AppRoutes.Schedule.route, Icons.Filled.CalendarToday),
             BottomItem(stringResource(R.string.profile), AppRoutes.Profile.route, Icons.Filled.Person)
         )
     }
@@ -194,6 +196,7 @@ fun AppNavigation(
             composable(AppRoutes.Notifications.route) { NotificationsScreen() }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
+            composable(AppRoutes.Schedule.route) { ScheduleScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen() }
             composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen(navController) }
             composable(AppRoutes.StudentHome.route) { StudentHomeScreen(navController = navController) }

@@ -57,14 +57,23 @@ class ConversationsActivity : AppCompatActivity() {
         fabNewChat.setOnClickListener { view ->
             // Dialog simple para pedir el otherUserId (en una app real deberías mostrar la lista de contactos)
             val input = EditText(this)
+             input.hint = "ID usuario o 'course:<courseId>' para chat por curso"
             AlertDialog.Builder(this)
                 .setTitle("Crear conversación")
-                .setMessage("Ingresa el ID del usuario con el que quieres conversar")
+                .setMessage("Ingresa el ID del usuario o 'course:<courseId>' para iniciar chat por curso")
                 .setView(input)
                 .setPositiveButton("Crear") { dialog, _ ->
-                    val otherId = input.text.toString().trim()
-                    if (otherId.isNotEmpty()) {
-                        createConversationWith(otherId, view)
+                    val raw = input.text.toString().trim()
+                    if (raw.isNotEmpty()) {
+                        if (raw.startsWith("course:", ignoreCase = true)) {
+                            val cid = raw.substringAfter(":").trim()
+                            if (cid.isNotEmpty()) {
+                                // abrir CourseChatActivity
+                                startActivity(android.content.Intent(this, CourseChatActivity::class.java).apply { putExtra("courseId", cid) })
+                            }
+                        } else {
+                            createConversationWith(raw, view)
+                        }
                     }
                     dialog.dismiss()
                 }

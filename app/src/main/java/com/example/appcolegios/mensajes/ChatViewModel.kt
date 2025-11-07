@@ -211,6 +211,74 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    // New: listen to a course-wide chat (doc id: course_{courseId})
+    @Suppress("unused")
+    fun listenCourseChat(courseId: String, onChange: (List<Message>) -> Unit = {}, onError: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            messagesListener?.remove()
+            messagesListener = null
+            currentOtherUserId = null
+            val chatDocId = "course_$courseId"
+            try {
+                // Ensure the chat document exists and contains courseId
+                val chatDocRef = db.collection("chats").document(chatDocId)
+                val snap = try { chatDocRef.get().await() } catch (_: Exception) { null }
+                if (snap == null || !snap.exists()) {
+                    try {
+                        chatDocRef.set(mapOf("courseId" to courseId, "updatedAt" to com.google.firebase.Timestamp.now()))
+                    } catch (_: Exception) { /* ignore */ }
+                }
+
+                // Attach listener to messages subcollection
+                val convRef = db.collection("chats").document(chatDocId).collection("messages")
+                messagesListener = convRef.orderBy("fechaHora", Query.Direction.ASCENDING)
+                    .addSnapshotListener { snapshots, error ->
+                        if (error != null) {
+                            onError(error.message ?: "Error desconocido")
+                            _uiState.value = _uiState.value.copy(isLoading = false, error = error.message)
+                            return@addSnapshotListener
+                        }
+                        if (snapshots != null) {
+                            val msgs = snapshots.toObjects(Message::class.java)
+                            onChange(msgs)
+                            _uiState.value = _uiState.value.copy(messages = msgs, isLoading = false)
+                        }
+                    }
+            } catch (e: Exception) {
+                onError(e.message ?: "Error listening course chat")
+                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
+            }
+        }
+    }
+
+    // New: send message to course chat (course_{courseId}/messages)
+    @Suppress("unused")
+    fun sendCourseMessage(courseId: String, text: String) {
+        viewModelScope.launch {
+            val fromId = auth.currentUser?.uid ?: return@launch
+            val chatDocId = "course_$courseId"
+            val now = Date()
+            val message = Message(
+                id = UUID.randomUUID().toString(),
+                fromId = fromId,
+                toId = courseId, // represent recipient as course id for course messages
+                texto = text,
+                fechaHora = now,
+                tipo = MessageType.TEXTO,
+                estado = MessageStatus.ENVIADO
+            )
+            try {
+                val chatDocRef = db.collection("chats").document(chatDocId)
+                chatDocRef.set(mapOf("courseId" to courseId, "updatedAt" to now), SetOptions.merge())
+                db.collection("chats").document(chatDocId).collection("messages").add(message)
+                // Update chat meta timestamp
+                chatDocRef.update("updatedAt", now)
+            } catch (_: Exception) {
+                // ignore failure silently for now
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
         messagesListener?.remove()

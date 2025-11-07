@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/courseChatRecyclerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_margin="8dp"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior"
+        android:layout_weight="1" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:layout_gravity="bottom"
+        android:background="?attr/colorSurface">
+
+        <EditText
+            android:id="@+id/courseChatMessageInput"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:hint="@string/write_message_placeholder"
+            android:inputType="textMultiLine"
+            android:autofillHints="emailAddress" />
+
+        <ImageButton
+            android:id="@+id/courseChatSendButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:src="@android:drawable/ic_menu_send"
+            android:contentDescription="@string/enviar_mensaje_cd"
+            android:background="?attr/selectableItemBackgroundBorderless" />
+    </LinearLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

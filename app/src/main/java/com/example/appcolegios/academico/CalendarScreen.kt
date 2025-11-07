@@ -577,6 +577,31 @@ fun CalendarScreen() {
                             events.add(CalendarEvent(eventId, title, description, date, type, EventSource.GLOBAL, targetCourseId))
                             showAddEventDialog = false
                             scope.launch { snackbarHostState.showSnackbar("Evento de curso agregado") }
+
+                            // Crear notificaciones para estudiantes del curso (solo si el creador no es estudiante)
+                            try {
+                                // obtener estudiantes desde subcolección courses/{courseId}/students
+                                val tcid = targetCourseId
+                                if (!tcid.isNullOrBlank()) {
+                                    db.collection("courses").document(tcid).collection("students").get()
+                                        .addOnSuccessListener { studsSnap ->
+                                            val studentIds = if (!studsSnap.isEmpty) studsSnap.documents.mapNotNull { it.id } else emptyList()
+                                            if (studentIds.isEmpty()) {
+                                                // fallback: si no hay subcoleccion, intentar buscar en students collection por courseId
+                                                db.collection("students").whereEqualTo("courseId", tcid).get()
+                                                    .addOnSuccessListener { altSnap ->
+                                                        val altIds = altSnap.documents.mapNotNull { it.id }
+                                                        // resolver senderName y crear notifs
+                                                        resolveAndCreateNotifs(altIds, title, description, eventId, db, auth)
+                                                    }
+                                            } else {
+                                                resolveAndCreateNotifs(studentIds, title, description, eventId, db, auth)
+                                            }
+                                        }
+                                }
+                            } catch (e: Exception) {
+                                Log.w("CalendarScreen", "Error creando notificaciones de curso: ${e.message}")
+                            }
                         }
                         .addOnFailureListener { e ->
                             Log.e("CalendarScreen", "Error saving global event: ${e.message}", e)
@@ -1093,3 +1118,59 @@ private fun loadMoreUpcoming(db: FirebaseFirestore, auth: FirebaseAuth, dest: Mu
          cbLast(null)
      }
  }
+
+// helper: crea notificaciones en users/{id}/notifications
+fun createNotifsForIds(ids: List<String>, title: String, body: String, relatedId: String, db: FirebaseFirestore, auth: FirebaseAuth) {
+     if (ids.isEmpty()) return
+    // fallback sender used if name lookup fails
+    val fallbackSender = auth.currentUser?.email ?: auth.currentUser?.uid ?: "Profesor"
+    for (sid in ids) {
+        try {
+            val notif = hashMapOf(
+                "titulo" to title,
+                "cuerpo" to body.take(200),
+                "remitente" to fallbackSender,
+                "senderName" to fallbackSender,
+                "fechaHora" to Timestamp.now(),
+                "leida" to false,
+                "relatedId" to relatedId,
+                "type" to "event"
+            )
+            db.collection("users").document(sid).collection("notifications").add(notif)
+        } catch (_: Exception) { }
+    }
+}
+
+// Resolve current user's display name then call createNotifsForIds with senderName set
+fun resolveAndCreateNotifs(ids: List<String>, title: String, body: String, relatedId: String, db: FirebaseFirestore, auth: FirebaseAuth) {
+    val uid = auth.currentUser?.uid
+    if (uid == null) {
+        createNotifsForIds(ids, title, body, relatedId, db, auth)
+        return
+    }
+    try {
+        db.collection("users").document(uid).get().addOnSuccessListener { doc ->
+            val name = doc.getString("name") ?: doc.getString("displayName") ?: auth.currentUser?.email ?: uid
+            // create notifications with senderName field
+            for (sid in ids) {
+                try {
+                    val notif = hashMapOf(
+                        "titulo" to title,
+                        "cuerpo" to body.take(200),
+                        "remitente" to uid,
+                        "senderName" to name,
+                        "fechaHora" to Timestamp.now(),
+                        "leida" to false,
+                        "relatedId" to relatedId,
+                        "type" to "event"
+                    )
+                    db.collection("users").document(sid).collection("notifications").add(notif)
+                } catch (_: Exception) {}
+            }
+        }.addOnFailureListener {
+            createNotifsForIds(ids, title, body, relatedId, db, auth)
+        }
+    } catch (_: Exception) {
+        createNotifsForIds(ids, title, body, relatedId, db, auth)
+    }
+}

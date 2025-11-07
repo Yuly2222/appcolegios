@@ -57,6 +57,7 @@ data class Notification(
     val titulo: String = "",
     val cuerpo: String = "",
     val remitente: String = "",
+    val senderName: String? = null,
     val fechaHora: Date = Date(0),
     val avatarUrl: String? = null,
     val leida: Boolean = false

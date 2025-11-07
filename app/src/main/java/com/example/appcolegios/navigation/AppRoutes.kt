@@ -17,6 +17,7 @@ sealed class AppRoutes(val route: String) {
     object Notifications : AppRoutes("notifications")
     object Messages : AppRoutes("messages")
     object Calendar : AppRoutes("calendar")
+    object Schedule : AppRoutes("schedule")
     object Admin : AppRoutes("admin")
     object Dashboard : AppRoutes("dashboard")
     object TeacherHome : AppRoutes("teacher_home")

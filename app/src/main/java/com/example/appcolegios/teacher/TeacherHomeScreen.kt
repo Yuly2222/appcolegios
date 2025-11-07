@@ -204,7 +204,7 @@ private fun QuickActionsCard(navController: NavController) {
                 QuickActionButton(
                     icon = Icons.AutoMirrored.Filled.Message,
                     label = "Comunicado",
-                    onClick = { navController.navigate(AppRoutes.Announcements.route) }
+                    onClick = { navController.navigate(AppRoutes.Notifications.route) }
                 )
             }
         }

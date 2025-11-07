@@ -31,7 +31,6 @@ fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewMod
     val scope = rememberCoroutineScope()
 
     var cutoffDays by remember { mutableStateOf<Int?>(7) }
-    val options = listOf(7, 30, 90)
     var expanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(cutoffDays) { notificationsViewModel.refresh(cutoffDays) }
@@ -163,8 +162,9 @@ fun NotificationItem(notification: Notification, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val senderLabel = notification.senderName ?: notification.remitente
                 Text(
-                    text = notification.remitente,
+                    text = senderLabel,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
