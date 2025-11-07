@@ -88,7 +88,10 @@ fun AdminUsersScreen(navController: NavController? = null, onUserSelected: (Stri
                     .padding(vertical = 8.dp)
                 ) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f).clickable { onUserSelected(id) }) {
+                        Column(modifier = Modifier.weight(1f).clickable {
+                            // navegar a detalle de perfil
+                            navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route.replace("{userId}", id))
+                        }) {
                             Text(name, style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Text(if (email.isNotBlank()) "$email · ${role}" else role, style = MaterialTheme.typography.bodySmall)
@@ -125,6 +128,12 @@ fun AdminUsersScreen(navController: NavController? = null, onUserSelected: (Stri
                                     // open event dialog to add event to user's calendar
                                     addEventForUser(db, id, name)
                                 }) { Icon(Icons.Filled.Event, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Agregar evento") }
+                                Spacer(Modifier.width(8.dp))
+                                TextButton(onClick = {
+                                    actionsOpen = false
+                                    // ver perfil (alternativa)
+                                    navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route.replace("{userId}", id))
+                                }) { Text("Ver perfil") }
                             }
                         }, dismissButton = { TextButton(onClick = { actionsOpen = false }) { Text("Cerrar") } })
                     }
