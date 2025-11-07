@@ -203,6 +203,13 @@ fun AppNavigation(
                 // navegar a gestión de horario del usuario seleccionado
                 navController.navigate(com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", uid))
             }) }
+            composable(
+                route = com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route,
+                arguments = listOf(navArgument("userId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val uid = backStackEntry.arguments?.getString("userId") ?: ""
+                com.example.appcolegios.admin.AdminProfileDetailScreen(navController, uid)
+            }
             composable(AppRoutes.AdminEventCreate.route) { com.example.appcolegios.admin.AdminEventCreateScreen(navController)
             }
             composable(AppRoutes.TeacherHome.route) { TeacherHomeScreen(navController) }
