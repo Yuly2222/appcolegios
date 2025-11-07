@@ -32,6 +32,7 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import org.apache.poi.ss.usermodel.Row
 import com.example.appcolegios.data.TestDataInitializer
+import com.google.firebase.firestore.FieldValue
 
 // Helper local para leer celdas de forma segura
 private fun safeCellValue(row: Row, index: Int): String? = row.getCell(index)?.toString()?.trim()?.takeIf { it.isNotBlank() }

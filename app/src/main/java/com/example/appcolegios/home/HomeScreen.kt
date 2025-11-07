@@ -4,6 +4,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.appcolegios.R
+import com.example.appcolegios.admin.AssignGroupDialog
 import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.data.model.Role
 import com.example.appcolegios.navigation.AppRoutes
@@ -205,16 +210,53 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
             }
             Role.ADMIN -> {
                 SectionHeader("Administración")
-                // Restaurar accesos: Admin, Dashboard y Perfil
+                // Diseño más estético: 3 tarjetas con iconos y una sección específica para gestión de grupos
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Admin.route) }) {
-                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.admin)) }
+                    ElevatedCard(modifier = Modifier.weight(1f)) {
+                        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(imageVector = Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Text(stringResource(R.string.admin), style = MaterialTheme.typography.titleSmall)
+                        }
                     }
+
                     ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Dashboard.route) }) {
-                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.dashboard)) }
+                        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(imageVector = Icons.Default.Dashboard, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Text(stringResource(R.string.dashboard), style = MaterialTheme.typography.titleSmall)
+                        }
                     }
+
                     ElevatedCard(modifier = Modifier.weight(1f), onClick = { onNavigate(AppRoutes.Profile.route) }) {
-                        Box(Modifier.height(84.dp).fillMaxWidth(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.profile)) }
+                        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(imageVector = Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            Spacer(Modifier.height(8.dp))
+                            Text(stringResource(R.string.profile), style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(16.dp))
+
+                // Estado visible para toda la sección Admin: controlar diálogo de asignación
+                var showAssignDialogHome by remember { mutableStateOf(false) }
+
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Gestión de Grupos", style = MaterialTheme.typography.titleMedium)
+                        Text("Asignar o quitar curso/grupo a docentes por email o UID. También puedes importar/exportar docentes en CSV.")
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = { showAssignDialogHome = true }, modifier = Modifier.weight(1f)) {
+                                Text("Asignar / Quitar grupo")
+                            }
+                            OutlinedButton(onClick = { onNavigate(AppRoutes.Admin.route) }, modifier = Modifier.weight(1f)) {
+                                Text("Panel Admin")
+                            }
+                        }
+                        if (showAssignDialogHome) {
+                            AssignGroupDialog(onDismiss = { showAssignDialogHome = false })
+                        }
                     }
                 }
             }
