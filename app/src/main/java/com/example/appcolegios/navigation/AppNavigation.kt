@@ -199,10 +199,16 @@ fun AppNavigation(
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Schedule.route) { ScheduleScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController) }
-            composable(AppRoutes.AdminUsers.route) { AdminUsersScreen(onUserSelected = { uid ->
-                // navegar a gestión de horario del usuario seleccionado
-                navController.navigate(com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", uid))
-            }) }
+            composable(
+                route = com.example.appcolegios.navigation.AppRoutes.AdminUsers.route,
+                arguments = listOf(navArgument("mode") { type = NavType.StringType; defaultValue = "view" })
+            ) { backStackEntry ->
+                val mode = backStackEntry.arguments?.getString("mode") ?: "view"
+                com.example.appcolegios.admin.AdminUsersScreen(navController = navController, mode = mode, onUserSelected = { uid ->
+                    // navegar a gestión de horario del usuario seleccionado
+                    navController.navigate(com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", uid))
+                })
+            }
             composable(
                 route = com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route,
                 arguments = listOf(navArgument("userId") { type = NavType.StringType })

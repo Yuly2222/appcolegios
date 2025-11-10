@@ -35,6 +35,8 @@ import android.util.Base64 as AndroidBase64
 import coil.request.ImageRequest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navController: NavController? = null) {
@@ -60,12 +62,14 @@ fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navControlle
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background
     ) { contentPadding ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(16.dp)
                 .padding(contentPadding),
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Mostrar rol visible arriba, para todos los usuarios

@@ -29,7 +29,7 @@ sealed class AppRoutes(val route: String) {
     object Ubicacion : AppRoutes("ubicacion")
 
     // Admin helpers
-    object AdminUsers : AppRoutes("admin_users")
+    object AdminUsers : AppRoutes("admin_users/{mode}")
     object AdminScheduleManage : AppRoutes("admin_schedule/{userId}")
     object AdminEventCreate : AppRoutes("admin_event_create")
     object AdminProfileDetail : AppRoutes("admin_profile/{userId}")

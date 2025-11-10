@@ -129,6 +129,10 @@
     <string name="admin">Admin</string>
     <string name="groups">Grupos</string>
     <string name="total_users">Usuarios totales</string>
+    <string name="visual_summary">Resumen Visual</string>
+    <string name="distribution_users">Distribución usuarios</string>
+    <string name="others">Otros</string>
+    <string name="total_count">Total: %1$d</string>
 
     <!-- Nuevos strings usados en TransportActivity -->
     <string name="last_attendance_today">Última asistencia: Hoy a las %1$s (%2$s)</string>

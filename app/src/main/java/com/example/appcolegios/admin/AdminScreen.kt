@@ -37,6 +37,8 @@ import com.example.appcolegios.data.TestDataInitializer
 import androidx.navigation.NavController
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 // Helper local para leer celdas de forma segura
 private fun safeCellValue(row: Row, index: Int): String? = row.getCell(index)?.toString()?.trim()?.takeIf { it.isNotBlank() }
@@ -107,45 +109,41 @@ fun AdminScreen(navController: NavController? = null) {
                                     // Formato completo (9 cols): 0 nombre,1 apellidos,2 tipoDoc,3 numeroDoc,4 celular,5 direccion,6 email,7 pass,8 rol
                                     // Formato compacto (>=5 cols): 0 nombre,1 apellidos,2 tipo,3 email,4 role
                                     val cellCount = row.lastCellNum.toInt()
-                                    @Suppress("RedundantInitializer") var nombre = ""
-                                    @Suppress("RedundantInitializer") var apellidos = ""
-                                    @Suppress("RedundantInitializer") var tipo = ""
-                                    @Suppress("RedundantInitializer") var email = ""
-                                    var pass: String? = null
-                                    var rol = "ESTUDIANTE"
-
+                                    // Determinar campos usando una expresión cuando sea posible para evitar inicializadores redundantes
+                                    val nombre: String
+                                    val apellidos: String
+                                    val tipo: String
+                                    val email: String
+                                    val pass: String?
+                                    val rol: String
                                     if (cellCount >= 9) {
                                         nombre = row.getCell(0)?.toString()?.trim() ?: ""
-                                        @Suppress("RemoveRedundantQualifierName")
                                         apellidos = safeCellValue(row, 1) ?: ""
-                                        @Suppress("RemoveRedundantQualifierName")
                                         tipo = safeCellValue(row, 2) ?: ""
-                                        // salto campos intermedios
                                         email = safeCellValue(row, 6) ?: ""
-                                        val cell7 = safeCellValue(row,7)
-                                        pass = cell7
-                                        // leer rol
-                                        val rawRol = safeCellValue(row,8) ?: ""
+                                        pass = safeCellValue(row, 7)
+                                        val rawRol = safeCellValue(row, 8) ?: ""
                                         rol = if (rawRol.isBlank()) "ESTUDIANTE" else rawRol
                                     } else if (cellCount >= 5) {
                                         nombre = safeCellValue(row, 0) ?: row.getCell(0)?.toString()?.trim() ?: ""
-                                        @Suppress("RemoveRedundantQualifierName")
                                         apellidos = safeCellValue(row, 1) ?: ""
-                                        @Suppress("RemoveRedundantQualifierName")
                                         tipo = safeCellValue(row, 2) ?: ""
                                         email = safeCellValue(row, 3) ?: ""
+                                        pass = if (cellCount > 5) safeCellValue(row, 5) else null
                                         rol = safeCellValue(row, 4) ?: "ESTUDIANTE"
-                                        // si hay columna 5 posible password
-                                        if (cellCount > 5) pass = safeCellValue(row, 5)
                                     } else {
-                                        // intentar una heuristica: buscar el primer email-like cell
+                                        var mailTmp = ""
                                         for (c in 0 until cellCount) {
                                             val v = row.getCell(c)?.toString()?.trim() ?: ""
-                                            if (v.contains("@")) { email = v; break }
+                                            if (v.contains("@")) { mailTmp = v; break }
                                         }
+                                        email = mailTmp
                                         nombre = row.getCell(0)?.toString()?.trim() ?: ""
+                                        apellidos = ""
+                                        tipo = ""
+                                        pass = null
+                                        rol = "ESTUDIANTE"
                                     }
-
                                     if (email.isBlank() || nombre.isBlank()) continue
 
                                     val roleParsed = when (rol.uppercase()) {
@@ -265,7 +263,7 @@ fun AdminScreen(navController: NavController? = null) {
 
                             // PREVIEW: leer primeras PREVIEW_N líneas y poblar previewRows
                             val tmpRows = mutableListOf<List<String>>()
-                            var headerLine = reader.readLine()
+                            val headerLine = reader.readLine()
                             val isHeader = headerLine != null && (headerLine.contains("email", true) || headerLine.contains("nombre", true) || headerLine.contains("name", true))
                             if (!isHeader && headerLine != null) {
                                 tmpRows.add(parseCsvLine(headerLine))
@@ -291,10 +289,12 @@ fun AdminScreen(navController: NavController? = null) {
         }
     }
 
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
@@ -309,19 +309,15 @@ fun AdminScreen(navController: NavController? = null) {
                 val intent = android.content.Intent(context, RegisterActivity::class.java)
                 intent.putExtra("fromAdmin", true)
                 context.startActivity(intent)
-                Unit
             },
             "Ver perfiles" to {
-                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminUsers.route)
-                Unit
+                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminUsers.route.replace("{mode}", "view"))
             },
             "Gestionar horarios" to {
-                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminUsers.route)
-                Unit
+                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminUsers.route.replace("{mode}", "manage"))
             },
             "Crear evento/Notificación" to {
                 navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminEventCreate.route)
-                Unit
             }
         )
 
@@ -364,7 +360,7 @@ fun AdminScreen(navController: NavController? = null) {
                                 val roleVal = mappedRoleCol?.let { r.getOrNull(it) } ?: "ESTUDIANTE"
                                 val display = nameVal?.trim() ?: continue
                                 val emailS = emailVal?.trim() ?: continue
-                                val roleParsed = when (roleVal?.trim()?.uppercase()) {
+                                val roleParsed = when (roleVal.trim().uppercase()) {
                                     "PADRE" -> "PADRE"; "DOCENTE" -> "DOCENTE"; "ADMIN" -> "ADMIN"; else -> "ESTUDIANTE"
                                 }
                                 val coll = when (roleParsed) {

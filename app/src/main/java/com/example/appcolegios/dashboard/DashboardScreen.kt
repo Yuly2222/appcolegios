@@ -2,6 +2,7 @@ package com.example.appcolegios.dashboard
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -18,6 +19,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.R
+import java.util.Locale
 
 @Composable
 fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
@@ -46,6 +48,11 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         ChartSection(state)
         Spacer(Modifier.height(20.dp))
 
+        // Pie chart adicional
+        PieChartSection(state)
+
+        Spacer(Modifier.height(20.dp))
+
         // Tarjetas de estadísticas
         StatsGrid(state)
     }
@@ -58,7 +65,7 @@ private fun ChartSection(state: DashboardState) {
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Text("Resumen Visual", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Text(stringResource(R.string.visual_summary), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(12.dp))
 
             val maxValue = maxOf(state.usersCount, state.studentsCount, state.teachersCount, state.groupsCount).toFloat()
@@ -146,6 +153,72 @@ private fun StatsGrid(state: DashboardState) {
                         Text(text = stringResource(labelId), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         Text(text = value.toString(), style = MaterialTheme.typography.displaySmall, color = color)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PieChartSection(state: DashboardState) {
+    Card(
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(stringResource(R.string.distribution_users), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+
+            val students = state.studentsCount.coerceAtLeast(0).toFloat()
+            val teachers = state.teachersCount.coerceAtLeast(0).toFloat()
+            val admins = (state.usersCount - state.studentsCount - state.teachersCount).coerceAtLeast(0).toFloat()
+            val total = (students + teachers + admins).coerceAtLeast(1f)
+
+            val sections = listOf(
+                Pair(stringResource(R.string.students), students),
+                Pair(stringResource(R.string.teachers), teachers),
+                Pair(stringResource(R.string.others), admins)
+            )
+
+            SimplePieChart(values = sections.map { it.second }, colors = listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.primaryContainer), labels = sections.map { it.first }, total = total)
+        }
+    }
+}
+
+@Composable
+private fun SimplePieChart(values: List<Float>, colors: List<Color>, labels: List<String>, total: Float) {
+    // Animar fracciones para que el gráfico tenga una transición suave
+    val sweeps = values.map { (it / total) * 360f }
+    val animatedSweeps = sweeps.map { animateFloatAsState(targetValue = it).value }
+
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Box(contentAlignment = Alignment.Center) {
+            val size = 160.dp
+            Canvas(modifier = Modifier.size(size)) {
+                var startAngle = -90f
+                for (i in animatedSweeps.indices) {
+                    val sweep = animatedSweeps[i]
+                    drawArc(color = colors.getOrElse(i) { Color.Gray }, startAngle = startAngle, sweepAngle = sweep, useCenter = true)
+                    startAngle += sweep
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = stringResource(R.string.total_count, total.toInt()), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // Leyenda con color y porcentaje
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            val percentList = values.map { v -> if (total > 0f) (v / total * 100f) else 0f }
+            for (i in labels.indices) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                    // color box
+                    Box(modifier = Modifier.size(12.dp).background(colors.getOrElse(i) { Color.Gray }))
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = labels.getOrElse(i) { "" }, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                    Text(text = "${String.format(Locale.US, "%.1f", percentList.getOrElse(i) { 0f })}%", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

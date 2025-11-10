@@ -10,6 +10,8 @@ import com.google.firebase.Timestamp
 import kotlinx.coroutines.launch
 import androidx.navigation.NavController
 import kotlinx.coroutines.tasks.await
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun AdminProfileDetailScreen(navController: NavController? = null, userId: String) {
@@ -46,7 +48,8 @@ fun AdminProfileDetailScreen(navController: NavController? = null, userId: Strin
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val scrollState = rememberScrollState()
+    Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Detalle de perfil", style = MaterialTheme.typography.headlineSmall)
         if (isLoading) CircularProgressIndicator()
         OutlinedTextField(value = displayName, onValueChange = { displayName = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
