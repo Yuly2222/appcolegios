@@ -63,10 +63,9 @@ class RegisterActivity : AppCompatActivity() {
 
         // Si es desde admin no mostramos la confirmación de contraseña y password puede ser opcional
         if (fromAdmin) {
-            // No ocultar los campos para que no parezcan "no funcionales".
-            // Sólo avisamos con el hint de que la contraseña no se almacenará en este modo.
-            passwordInput.hint = "Opcional (si se deja vacío se encola para backend)"
-            confirmInput.hint = "Opcional"
+            // Ocultar por completo TextInputLayout de contraseña y confirmación
+            (passwordInput.parent as? View)?.visibility = View.GONE
+            (confirmInput.parent as? View)?.visibility = View.GONE
         }
 
         registerButton.setOnClickListener {

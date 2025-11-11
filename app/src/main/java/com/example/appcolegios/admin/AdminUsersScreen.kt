@@ -85,13 +85,14 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
                 ) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f).clickable {
-                            // navegar a detalle de perfil
-                            navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route.replace("{userId}", id))
-                            // Solo en modo 'manage' notificamos al caller para permitir abrir el gestor de horarios desde flows externos
                             if (mode == "manage") {
-                                try {
-                                    onUserSelected(id)
-                                } catch (_: Exception) {}
+                                // Ir directo a gestionar horario, sin pasar por detalle
+                                val route = com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", id)
+                                try { navController?.navigate(route) } catch (_: Exception) {}
+                                try { onUserSelected(id) } catch (_: Exception) {}
+                            } else {
+                                // navegar a detalle de perfil
+                                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route.replace("{userId}", id))
                             }
                         }) {
                             Text(name, style = MaterialTheme.typography.titleMedium)
