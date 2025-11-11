@@ -33,6 +33,7 @@ sealed class AppRoutes(val route: String) {
     object AdminScheduleManage : AppRoutes("admin_schedule/{userId}")
     object AdminEventCreate : AppRoutes("admin_event_create")
     object AdminProfileDetail : AppRoutes("admin_profile/{userId}")
+    object AdminParents : AppRoutes("admin_parents")
 
     // Calendar deep link to open specific event
     object CalendarEvent : AppRoutes("calendar/{eventId}")

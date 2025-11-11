@@ -35,6 +35,7 @@ import com.google.firebase.auth.FirebaseAuth
 import org.apache.poi.ss.usermodel.Row
 import com.example.appcolegios.data.TestDataInitializer
 import androidx.navigation.NavController
+import com.example.appcolegios.navigation.AppRoutes
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.rememberScrollState
@@ -318,6 +319,9 @@ fun AdminScreen(navController: NavController? = null) {
             },
             "Crear evento/Notificación" to {
                 navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminEventCreate.route)
+            },
+            "Padres" to {
+                navController?.navigate(AppRoutes.AdminParents.route)
             }
         )
 
