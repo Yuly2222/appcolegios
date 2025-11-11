@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.appcolegios.R
+import com.example.appcolegios.admin.AssignGroupDialog
 import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.data.model.Role
 import com.example.appcolegios.navigation.AppRoutes
@@ -239,19 +240,22 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
                 Spacer(Modifier.height(16.dp))
 
                 // Estado visible para toda la sección Admin: controlar diálogo de asignación
-                //                var showAssignDialogHome by remember { mutableStateOf(false) }
+                var showAssignDialogHome by remember { mutableStateOf(false) }
 
                 Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Gestión de Grupos", style = MaterialTheme.typography.titleMedium)
                         Text("Asignar o quitar curso/grupo a docentes por email o UID. También puedes importar/exportar docentes en CSV.")
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { onNavigate(com.example.appcolegios.navigation.AppRoutes.AssignGroup.route) }, modifier = Modifier.weight(1f)) {
+                            Button(onClick = { showAssignDialogHome = true }, modifier = Modifier.weight(1f)) {
                                 Text("Asignar / Quitar grupo")
                             }
                             OutlinedButton(onClick = { onNavigate(AppRoutes.Admin.route) }, modifier = Modifier.weight(1f)) {
                                 Text("Panel Admin")
                             }
+                        }
+                        if (showAssignDialogHome) {
+                            AssignGroupDialog(onDismiss = { showAssignDialogHome = false })
                         }
                         //                        if (showAssignDialogHome) {
                         //                            AssignGroupDialog(onDismiss = { showAssignDialogHome = false })

@@ -49,6 +49,11 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
     var notifTitle by remember { mutableStateOf("") }
     var notifBody by remember { mutableStateOf("") }
 
+    // Usar el diálogo central AssignGroupDialog: estado local para abrirlo
+    var showAssignGroupDialog by remember { mutableStateOf(false) }
+    var assignDialogInitialIdentifier by remember { mutableStateOf<String?>(null) }
+    var assignDialogInitialTargetType by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(Unit) {
         isLoading = true
         try {
@@ -79,28 +84,37 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
                 val email = (u["email"] as? String) ?: ""
                 val role = (u["role"] as? String) ?: ""
                 var actionsOpen by remember { mutableStateOf(false) }
+
                 Column(modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp)
                 ) {
                     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(modifier = Modifier.weight(1f).clickable {
-                            if (mode == "manage") {
-                                // Ir directo a gestionar horario, sin pasar por detalle
-                                val route = com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", id)
-                                try { navController?.navigate(route) } catch (_: Exception) {}
-                                try { onUserSelected(id) } catch (_: Exception) {}
-                            } else {
-                                // navegar a detalle de perfil
-                                navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route.replace("{userId}", id))
-                            }
-                        }) {
+                        // Columna clicable correctamente balanceada
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable {
+                                    if (mode == "manage") {
+                                        // Ir directo a gestionar horario, sin pasar por detalle
+                                        val route = com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route.replace("{userId}", id)
+                                        try { navController?.navigate(route) } catch (_: Exception) {}
+                                        try { onUserSelected(id) } catch (_: Exception) {}
+                                    } else {
+                                        // navegar a detalle de perfil
+                                        try { navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AdminProfileDetail.route.replace("{userId}", id)) } catch (_: Exception) {}
+                                    }
+                                }
+                        ) {
                             Text(name, style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.height(4.dp))
                             Text(if (email.isNotBlank()) "$email · ${role}" else role, style = MaterialTheme.typography.bodySmall)
                         }
+
                         IconButton(onClick = { actionsOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Acciones") }
                     }
+
+                    // Reemplazo de HorizontalDivider por Divider
                     HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                     Spacer(Modifier.height(4.dp))
 
@@ -141,6 +155,14 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
                                         actionsOpen = false
                                         addEventForUser(db, id, name)
                                     }) { Icon(Icons.Filled.Event, contentDescription = null); Spacer(Modifier.width(6.dp)); Text("Agregar evento") }
+                                    Spacer(Modifier.height(6.dp))
+                                    // Abrir el AssignGroupDialog centralizado
+                                    TextButton(onClick = {
+                                        actionsOpen = false
+                                        assignDialogInitialIdentifier = id
+                                        assignDialogInitialTargetType = "teacher"
+                                        showAssignGroupDialog = true
+                                    }) { Text("Asignar curso") }
                                     Spacer(Modifier.height(6.dp))
                                     TextButton(onClick = {
                                         actionsOpen = false
@@ -223,6 +245,15 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
                     composeNotificationForUserName = null
                 }) { Text("Enviar") }
             }, dismissButton = { TextButton(onClick = { composeNotificationForUserId = null; composeNotificationForUserName = null }) { Text("Cancelar") } })
+        }
+
+        // New: Assign dialog for teacher/student
+        if (showAssignGroupDialog) {
+            AssignGroupDialog(
+                onDismiss = { showAssignGroupDialog = false },
+                initialIdentifier = assignDialogInitialIdentifier,
+                initialTargetType = assignDialogInitialTargetType
+            )
         }
     }
 }
