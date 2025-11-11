@@ -27,6 +27,7 @@ sealed class AppRoutes(val route: String) {
     object Chat : AppRoutes("chat/{otherUserId}")
     object NewMessage : AppRoutes("new_message")
     object Ubicacion : AppRoutes("ubicacion")
+    object AssignGroup : AppRoutes("admin_assign_group")
 
     // Admin helpers
     object AdminUsers : AppRoutes("admin_users/{mode}")

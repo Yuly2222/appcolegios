@@ -52,7 +52,7 @@ fun AdminParentsScreen(onDone: (() -> Unit)? = null) {
                             val pEmail = parts.getOrNull(0)?.takeIf { it.contains("@") } ?: continue
                             val childIdent = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: continue
                             processed++
-                            val (ok, msg) = assignParentToChild(db, pEmail, childIdent)
+                            val (ok, _) = assignParentToChild(db, pEmail, childIdent)
                             if (ok) assigned++ else failed++
                         }
                         status = "Procesados: $processed, asignados: $assigned, fallidos: $failed"
@@ -78,7 +78,7 @@ fun AdminParentsScreen(onDone: (() -> Unit)? = null) {
                 if (parentEmail.isBlank() || childIdentifier.isBlank()) { status = "Rellena ambos campos"; return@Button }
                 scope.launch {
                     loading = true; status = null
-                    val (ok, msg) = assignParentToChild(db, parentEmail.trim(), childIdentifier.trim())
+                    val (_, msg) = assignParentToChild(db, parentEmail.trim(), childIdentifier.trim())
                     status = msg
                     loading = false
                 }

@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import java.util.Locale
 import androidx.compose.ui.platform.LocalContext
 import com.example.appcolegios.data.UserPreferencesRepository
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.appcolegios.perfil.ProfileViewModel
+import com.example.appcolegios.data.model.Student
 
 data class Grade(
     val subject: String,
@@ -36,51 +39,35 @@ data class ChildStudent(
 
 @Composable
 fun NotesScreen() {
-    // Lista de hijos de ejemplo, cada uno con sus propias notas
-    val children = remember {
-        listOf(
-            ChildStudent(
-                studentName = "Juan Camilo Díaz",
-                studentCourse = "10-A",
-                grades = listOf(
-                    Grade("Matemáticas", "Periodo 1", 4.5, "Excelente desempeño en cálculo", "Herman González"),
-                    Grade("Español", "Periodo 1", 4.2, "Buena comprensión lectora", "María López"),
-                    Grade("Ciencias", "Periodo 1", 4.8, "Sobresaliente en laboratorios", "Carlos Ruiz"),
-                    Grade("Inglés", "Periodo 1", 4.0, "Buen nivel conversacional", "Ana Smith")
-                )
-            ),
-            ChildStudent(
-                studentName = "María Gómez",
-                studentCourse = "8-B",
-                grades = listOf(
-                    Grade("Matemáticas", "Periodo 1", 4.0, "Buen razonamiento", "Hernán Pérez"),
-                    Grade("Español", "Periodo 1", 3.8, "Debe mejorar ortografía", "María López"),
-                    Grade("Ciencias", "Periodo 1", 4.1, "Buen laboratorio", "Carlos Ruiz")
-                )
-            )
-        )
-    }
-
-    // Leer role / name desde DataStore para condicionar la UI
+    // Usar ProfileViewModel para obtener hijos reales y determinar si es PADRE
+    val profileVm: ProfileViewModel = viewModel()
+    val children by profileVm.children.collectAsState()
     val context = LocalContext.current
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val isStudent = (userData.role ?: "").equals("ESTUDIANTE", ignoreCase = true)
-    val currentUserName = (userData.name ?: "").trim()
 
-    // Estado: índice del hijo seleccionado y control del diálogo
     var selectedChildIndex by remember { mutableStateOf(0) }
     var showSelectChildDialog by remember { mutableStateOf(false) }
 
-    // Si el usuario es estudiante, fijamos el índice al hijo que coincide por nombre (si existe)
-    LaunchedEffect(currentUserName) {
-        if (isStudent && currentUserName.isNotBlank()) {
-            val idx = children.indexOfFirst { it.studentName.equals(currentUserName, ignoreCase = true) }
-            if (idx != -1) selectedChildIndex = idx
-        }
+    // Si es estudiante y no hay hijos listados, no seleccionar
+    LaunchedEffect(children, userData) {
+        if (children.isNotEmpty()) selectedChildIndex = 0
     }
 
-    val grades = children.getOrNull(selectedChildIndex)?.grades ?: emptyList()
+    // Mapear datos: usamos datos reales de children si existen; si no, mostramos demo
+    val demoGrades = listOf(
+        Grade("Matemáticas", "Periodo 1", 4.5, "Excelente desempeño en cálculo", "Herman González"),
+        Grade("Español", "Periodo 1", 4.2, "Buena comprensión lectora", "María López"),
+        Grade("Ciencias", "Periodo 1", 4.8, "Sobresaliente en laboratorios", "Carlos Ruiz"),
+        Grade("Inglés", "Periodo 1", 4.0, "Buen nivel conversacional", "Ana Smith")
+    )
+
+    val grades = if (children.isNotEmpty()) {
+        // aquí podrías cargar notas reales desde Firestore por studentId; por ahora mostramos demo por hijo
+        demoGrades
+    } else demoGrades
+
     val averageGrade = if (grades.isEmpty()) 0.0 else grades.map { it.grade }.average()
 
     Column(
@@ -89,6 +76,7 @@ fun NotesScreen() {
             .padding(16.dp)
     ) {
         // Header con nombre del estudiante y promedio (clickable para seleccionar hijo)
+        val currentChild = children.getOrNull(selectedChildIndex)
         Card(
             modifier = if (isStudent) Modifier.fillMaxWidth() else Modifier
                 .fillMaxWidth()
@@ -106,13 +94,13 @@ fun NotesScreen() {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        children[selectedChildIndex].studentName,
+                        currentChild?.nombre ?: "--",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Text(
-                        "Curso: ${children[selectedChildIndex].studentCourse}",
+                        "Curso: ${currentChild?.curso ?: "--"}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -143,38 +131,18 @@ fun NotesScreen() {
 
         // Diálogo de selección de hijo (solo para padres/docentes)
         if (!isStudent && showSelectChildDialog) {
-            var selIndex by remember { mutableStateOf(selectedChildIndex) }
-            AlertDialog(
-                onDismissRequest = { showSelectChildDialog = false },
-                title = { Text("Selecciona estudiante") },
-                text = {
-                    Column {
-                        children.forEachIndexed { idx, child ->
-                            Row(modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                                .clickable { selIndex = idx },
-                                verticalAlignment = Alignment.CenterVertically) {
-                                RadioButton(selected = selIndex == idx, onClick = { selIndex = idx })
-                                Spacer(Modifier.width(8.dp))
-                                Column {
-                                    Text(child.studentName, fontWeight = FontWeight.SemiBold)
-                                    Text("Curso: ${child.studentCourse}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
+            var sel by remember { mutableStateOf(selectedChildIndex) }
+            AlertDialog(onDismissRequest = { showSelectChildDialog = false }, title = { Text("Selecciona estudiante") }, text = {
+                Column {
+                    if (children.isEmpty()) Text("No hay hijos asociados") else children.forEachIndexed { idx, ch ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp).clickable { sel = idx }, verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = sel == idx, onClick = { sel = idx })
+                            Spacer(Modifier.width(8.dp))
+                            Column { Text(ch.nombre, fontWeight = FontWeight.SemiBold); Text("Curso: ${ch.curso}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         }
                     }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        selectedChildIndex = selIndex
-                        showSelectChildDialog = false
-                    }) { Text("Aceptar") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") }
                 }
-            )
+            }, confirmButton = { TextButton(onClick = { selectedChildIndex = sel; showSelectChildDialog = false }) { Text("Aceptar") } }, dismissButton = { TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") } })
         }
 
         Spacer(Modifier.height(16.dp))

@@ -17,6 +17,9 @@ import kotlinx.coroutines.tasks.await
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import androidx.compose.ui.window.Dialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 
 @Composable
 fun AssignGroupDialog(
@@ -96,11 +99,34 @@ fun AssignGroupDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = { onDismiss() },
-        title = { Text("Asignar / Quitar curso y grupo", style = MaterialTheme.typography.titleMedium) },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    // Reemplazamos AlertDialog por Dialog con Card interior para un layout más controlado y estético
+    Dialog(onDismissRequest = { onDismiss() }) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .wrapContentHeight(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = MaterialTheme.shapes.medium,
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Header con titulo y boton cerrar
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Asignar / Quitar curso y grupo",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { onDismiss() }) {
+                        Icon(imageVector = Icons.Filled.Close, contentDescription = "Cerrar")
+                    }
+                }
+
                 Text("Introduce el email o UID del docente. También puedes importar un CSV con un email por línea para asignación masiva.", style = MaterialTheme.typography.bodyMedium)
 
                 OutlinedTextField(
@@ -161,74 +187,78 @@ fun AssignGroupDialog(
                 if (!foundName.isNullOrBlank()) Text("Docente: ${foundName} (uid=${foundUid})", style = MaterialTheme.typography.bodyMedium)
                 if (!dialogMessage.isNullOrBlank()) Text(dialogMessage!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (dialogLoading) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            }
-        },
-        confirmButton = {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = {
-                    if (identifier.isBlank()) { dialogMessage = "Introduce email o uid"; return@Button }
-                    dialogLoading = true
-                    dialogMessage = null
-                    scope.launch {
-                        try {
-                            val success = assignToCourseAndGroup(db, identifier, curso, grupo)
-                            if (success) dialogMessage = "Asignación completada y perfil actualizado"
-                            else dialogMessage = "No se encontró usuario/docente; se creó un registro en teachers si fue posible."
-                        } catch (e: Exception) {
-                            dialogMessage = "Error asignando: ${e.message}"
-                        } finally {
-                            dialogLoading = false
-                        }
-                    }
-                }, modifier = Modifier.weight(1f)) { Text("Asignar y actualizar perfil") }
 
-                OutlinedButton(onClick = {
-                    if (identifier.isBlank()) { dialogMessage = "Introduce email o uid"; return@OutlinedButton }
-                    dialogLoading = true
-                    dialogMessage = null
-                    scope.launch {
-                        try {
-                            val uid = findUidByIdentifier(db, identifier)
-                            if (uid == null) {
-                                dialogMessage = "No se encontró usuario/docente"
-                            } else {
-                                val groupKeyLocal = if (curso.isBlank() || grupo.isBlank()) null else ("${curso.trim()}-${grupo.trim()}")
-                                if (groupKeyLocal != null) {
-                                    // eliminar solo ese grupo del array 'grupos'
-                                    db.collection("teachers").document(uid).update(mapOf("grupos" to FieldValue.arrayRemove(groupKeyLocal))).await()
-                                    try { db.collection("users").document(uid).update(mapOf("grupos" to FieldValue.arrayRemove(groupKeyLocal))).await() } catch (_: Exception) {}
-                                    // también, si curso/grupo actuales coinciden con este grupo, eliminarlos
-                                    val doc = db.collection("teachers").document(uid).get().await()
-                                    val currentCurso = doc.getString("curso")
-                                    if (currentCurso == groupKeyLocal) {
-                                        db.collection("teachers").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
-                                        try { db.collection("users").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
-                                    }
-                                    dialogMessage = "Grupo $groupKeyLocal eliminado del perfil"
-                                } else {
-                                    // eliminar todo el campo 'grupos' y campos legacy
-                                    db.collection("teachers").document(uid).update(mapOf("grupos" to FieldValue.delete(), "curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
-                                    try { db.collection("users").document(uid).update(mapOf("grupos" to FieldValue.delete(), "curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
-                                    dialogMessage = "Todos los grupos eliminados del perfil"
-                                }
-                             }
-                        } catch (e: Exception) {
-                            dialogMessage = "Error quitando: ${e.message}"
-                        } finally {
-                            dialogLoading = false
+                Divider()
+
+                // Acciones principales al final, mejor separadas
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Button(onClick = {
+                        if (identifier.isBlank()) { dialogMessage = "Introduce email o uid"; return@Button }
+                        dialogLoading = true
+                        dialogMessage = null
+                        scope.launch {
+                            try {
+                                val success = assignToCourseAndGroup(db, identifier, curso, grupo)
+                                if (success) dialogMessage = "Asignación completada y perfil actualizado"
+                                else dialogMessage = "No se encontró usuario/docente; se creó un registro en teachers si fue posible."
+                            } catch (e: Exception) {
+                                dialogMessage = "Error asignando: ${e.message}"
+                            } finally {
+                                dialogLoading = false
+                            }
                         }
-                    }
-                }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Quitar del perfil") }
+                    }, modifier = Modifier.weight(1f)) { Text("Asignar y actualizar perfil") }
+
+                    OutlinedButton(onClick = {
+                        if (identifier.isBlank()) { dialogMessage = "Introduce email o uid"; return@OutlinedButton }
+                        dialogLoading = true
+                        dialogMessage = null
+                        scope.launch {
+                            try {
+                                val uid = findUidByIdentifier(db, identifier)
+                                if (uid == null) {
+                                    dialogMessage = "No se encontró usuario/docente"
+                                } else {
+                                    val groupKeyLocal = if (curso.isBlank() || grupo.isBlank()) null else ("${curso.trim()}-${grupo.trim()}")
+                                    if (groupKeyLocal != null) {
+                                        // eliminar solo ese grupo del array 'grupos'
+                                        db.collection("teachers").document(uid).update(mapOf("grupos" to FieldValue.arrayRemove(groupKeyLocal))).await()
+                                        try { db.collection("users").document(uid).update(mapOf("grupos" to FieldValue.arrayRemove(groupKeyLocal))).await() } catch (_: Exception) {}
+                                        // también, si curso/grupo actuales coinciden con este grupo, eliminarlos
+                                        val doc = db.collection("teachers").document(uid).get().await()
+                                        val currentCurso = doc.getString("curso")
+                                        if (currentCurso == groupKeyLocal) {
+                                            db.collection("teachers").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
+                                            try { db.collection("users").document(uid).update(mapOf("curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
+                                        }
+                                        dialogMessage = "Grupo $groupKeyLocal eliminado del perfil"
+                                    } else {
+                                        // eliminar todo el campo 'grupos' y campos legacy
+                                        db.collection("teachers").document(uid).update(mapOf("grupos" to FieldValue.delete(), "curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await()
+                                        try { db.collection("users").document(uid).update(mapOf("grupos" to FieldValue.delete(), "curso" to FieldValue.delete(), "grupo" to FieldValue.delete(), "curso_simple" to FieldValue.delete())).await() } catch (_: Exception) {}
+                                        dialogMessage = "Todos los grupos eliminados del perfil"
+                                    }
+                                 }
+                            } catch (e: Exception) {
+                                dialogMessage = "Error quitando: ${e.message}"
+                            } finally {
+                                dialogLoading = false
+                            }
+                        }
+                    }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("Quitar del perfil") }
+                }
+
+                // Boton de cierre abajo a la derecha
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { onDismiss() }) { Text("Cerrar") }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = { onDismiss() }) { Text("Cerrar") }
         }
-    )
+    }
 }
 
 // Helper: busca uid por email o uid; devuelve null si no existe
-private suspend fun findUidByIdentifier(db: FirebaseFirestore, identifier: String): String? {
+suspend fun findUidByIdentifier(db: FirebaseFirestore, identifier: String): String? {
     // si parece email
     if (identifier.contains("@")) {
         val idNorm = identifier.trim()

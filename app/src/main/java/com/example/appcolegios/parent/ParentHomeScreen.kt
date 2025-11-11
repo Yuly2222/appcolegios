@@ -15,6 +15,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.appcolegios.perfil.ProfileViewModel
+import com.example.appcolegios.data.model.Student
 
 // Restaurar data classes necesarias
 data class Grade(
@@ -63,13 +66,25 @@ data class ParentDashboardState(
 
 @Composable
 fun ParentHomeScreen() {
-    var state by remember { mutableStateOf(ParentDashboardState()) }
-    // Control del diálogo de selección de hijo
+    // Usar ProfileViewModel para obtener hijos reales
+    val profileVm: ProfileViewModel = viewModel()
+    val childrenList by profileVm.children.collectAsState()
+    var selectedChildIndex by remember { mutableStateOf(0) }
     var showSelectChildDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        // Cargar datos del padre y estudiante
-        state = loadParentDashboardData()
+    // Estado calculado a partir del hijo seleccionado
+    var state by remember { mutableStateOf(ParentDashboardState(loading = true)) }
+
+    LaunchedEffect(childrenList) {
+        // Si hay hijos, inicializar el estado con el primero
+        if (childrenList.isNotEmpty()) {
+            selectedChildIndex = 0
+            val s = childrenList[0]
+            state = mapStudentToDashboard(s, 0, childrenList)
+        } else {
+            // Sin hijos: repetir estado vacío pero no loading
+            state = ParentDashboardState(loading = false, children = emptyList())
+        }
     }
 
     if (state.loading) {
@@ -143,27 +158,22 @@ fun ParentHomeScreen() {
 
         // Diálogo para seleccionar otro hijo (fuera del LazyColumn, en contexto composable)
         if (showSelectChildDialog) {
-            val children = state.children
-            var selectedIndex by remember { mutableStateOf(state.selectedChildIndex) }
+            var sel by remember { mutableStateOf(selectedChildIndex) }
             AlertDialog(
                 onDismissRequest = { showSelectChildDialog = false },
                 title = { Text("Selecciona estudiante") },
                 text = {
                     Column {
-                        if (children.isEmpty()) {
-                            Text("No hay hijos asociados")
-                        } else {
-                            children.forEachIndexed { index, child ->
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable { selectedIndex = index }) {
-                                    RadioButton(selected = selectedIndex == index, onClick = { selectedIndex = index })
-                                    Spacer(Modifier.width(8.dp))
-                                    Column {
-                                        Text(child.studentName, fontWeight = FontWeight.SemiBold)
-                                        Text("Curso: ${child.studentGrade}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
+                        if (childrenList.isEmpty()) Text("No hay hijos asociados") else childrenList.forEachIndexed { index, child ->
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                                .clickable { sel = index }) {
+                                RadioButton(selected = sel == index, onClick = { sel = index })
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(child.nombre, fontWeight = FontWeight.SemiBold)
+                                    Text("Curso: ${child.curso}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
@@ -171,26 +181,14 @@ fun ParentHomeScreen() {
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        // Al confirmar, actualizamos el estado con los datos del hijo seleccionado
-                        if (state.children.isNotEmpty()) {
-                            val chosen = state.children[selectedIndex]
-                            state = state.copy(
-                                studentName = chosen.studentName,
-                                studentGrade = chosen.studentGrade,
-                                recentGrades = chosen.recentGrades,
-                                pendingPayments = chosen.pendingPayments,
-                                attendancePercentage = chosen.attendancePercentage,
-                                pendingTasks = chosen.pendingTasks,
-                                notifications = chosen.notifications,
-                                selectedChildIndex = selectedIndex
-                            )
+                        if (childrenList.isNotEmpty()) {
+                            selectedChildIndex = sel
+                            state = mapStudentToDashboard(childrenList[sel], sel, childrenList)
                         }
                         showSelectChildDialog = false
                     }) { Text("Aceptar") }
                 },
-                dismissButton = {
-                    TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") }
-                }
+                dismissButton = { TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") } }
             )
         }
     }
@@ -455,70 +453,29 @@ private fun NotificationCard(notification: ParentNotification) {
     }
 }
 
-private fun loadParentDashboardData(): ParentDashboardState {
-    return try {
-        // Datos de ejemplo - en producción se cargarían de Firestore
-        val child1 = ChildInfo(
-            studentName = "Juan Camilo Díaz",
-            studentGrade = "10-A",
-            recentGrades = listOf(
-                Grade("Matemáticas", 4.5, "1"),
-                Grade("Español", 4.2, "1"),
-                Grade("Ciencias", 4.8, "1"),
-                Grade("Inglés", 4.0, "1")
-            ),
-            pendingPayments = listOf(
-                Payment("Pensión Febrero", 500000.0, "2025-02-28", "PENDIENTE"),
-                Payment("Pensión Enero", 500000.0, "2025-01-31", "PAGADO")
-            ),
-            attendancePercentage = 92.5,
-            pendingTasks = 2,
-            notifications = listOf(
-                ParentNotification(
-                    "Reunión de padres",
-                    "Reunión con los docentes de matemáticas",
-                    "2025-03-10",
-                    false
-                )
-            )
-        )
-
-        val child2 = ChildInfo(
-            studentName = "María Gómez",
-            studentGrade = "8-B",
-            recentGrades = listOf(
-                Grade("Matemáticas", 4.0, "1"),
-                Grade("Español", 3.8, "1"),
-                Grade("Ciencias", 4.1, "1")
-            ),
-            pendingPayments = listOf(
-                Payment("Pensión Marzo", 480000.0, "2025-03-28", "PENDIENTE")
-            ),
-            attendancePercentage = 88.0,
-            pendingTasks = 1,
-            notifications = listOf(
-                ParentNotification(
-                    "Actividad extracurricular",
-                    "María fue seleccionada para el coro escolar",
-                    "2025-03-05",
-                    false
-                )
-            )
-        )
-
-        ParentDashboardState(
-            studentName = child1.studentName,
-            studentGrade = child1.studentGrade,
-            recentGrades = child1.recentGrades,
-            pendingPayments = child1.pendingPayments,
-            attendancePercentage = child1.attendancePercentage,
-            pendingTasks = child1.pendingTasks,
-            notifications = child1.notifications,
-            children = listOf(child1, child2),
-            selectedChildIndex = 0,
-            loading = false
-        )
-    } catch (e: Exception) {
-        ParentDashboardState(loading = false)
-    }
+// mapear Student (modelo) a ParentDashboardState.ChildInfo simplificado
+private fun mapStudentToDashboard(student: Student, index: Int, all: List<Student>): ParentDashboardState {
+    val name = if (student.nombre.isNotBlank()) student.nombre else (student.id)
+    val grade = listOfNotNull(student.curso.takeIf { it.isNotBlank() }, student.grupo.takeIf { it.isNotBlank() }).joinToString("-")
+    val child = ChildInfo(
+        studentName = name,
+        studentGrade = grade.ifBlank { "-" },
+        recentGrades = emptyList(),
+        pendingPayments = emptyList(),
+        attendancePercentage = 0.0,
+        pendingTasks = 0,
+        notifications = emptyList()
+    )
+    return ParentDashboardState(
+        studentName = child.studentName,
+        studentGrade = child.studentGrade,
+        recentGrades = child.recentGrades,
+        pendingPayments = child.pendingPayments,
+        attendancePercentage = child.attendancePercentage,
+        pendingTasks = child.pendingTasks,
+        notifications = child.notifications,
+        children = all.map { s -> ChildInfo(s.nombre.ifBlank { s.id }, listOfNotNull(s.curso.takeIf { it.isNotBlank() }, s.grupo.takeIf { it.isNotBlank() }).joinToString("-")) },
+        selectedChildIndex = index,
+        loading = false
+    )
 }

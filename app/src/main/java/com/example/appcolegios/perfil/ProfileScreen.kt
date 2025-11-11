@@ -39,10 +39,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 
 @Composable
-fun ProfileScreen(profileViewModel: ProfileViewModel = viewModel(), navController: NavController? = null) {
-    val studentResult by profileViewModel.student.collectAsState(initial = null)
-    val teacherResult by profileViewModel.teacherState.collectAsState(initial = null)
-    val isDemo = DemoData.isDemoUser()
+fun ProfileScreen(navController: NavController? = null) {
+    val profileViewModel = viewModel<ProfileViewModel>()
+     val studentResult by profileViewModel.student.collectAsState(initial = null)
+     val teacherResult by profileViewModel.teacherState.collectAsState(initial = null)
+     val isDemo = DemoData.isDemoUser()
 
     val context = LocalContext.current
     val userPrefs = UserPreferencesRepository(context)
@@ -191,7 +192,7 @@ private fun TeacherCard(
          if (uri != null) {
              // subir foto y actualizar photoUrl
              isUploading = true
-            profileViewModel.uploadPhotoAsBase64WithResolver(resolver, uri) { url, error ->
+            profileViewModel.uploadPhotoAsBase64WithResolver(resolver, uri) { url: String?, error: String? ->
                  isUploading = false
                  if (url != null) {
                      photoUrl = url
@@ -312,7 +313,7 @@ private fun AdminCard(onOpenAdmin: () -> Unit, onCreateUser: () -> Unit) {
 
 @Composable
 private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
-     val profileViewModel: ProfileViewModel = viewModel()
+     val profileViewModel: ProfileViewModel = viewModel<ProfileViewModel>()
      val coroutineScope = rememberCoroutineScope()
      val context = LocalContext.current
     // Leer nombre registrado en prefs/Firestore (Firebase) para mostrarlo arriba del curso
@@ -324,7 +325,7 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
      val resolver = LocalContext.current.contentResolver
      val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
-            profileViewModel.uploadStudentPhotoAsBase64WithResolver(resolver, uri) { url, error ->
+            profileViewModel.uploadStudentPhotoAsBase64WithResolver(resolver, uri) { url: String?, error: String? ->
                 if (url != null) {
                     photoUrl = url
                     coroutineScope.launch { Toast.makeText(context, "Foto subida correctamente", Toast.LENGTH_SHORT).show() }
