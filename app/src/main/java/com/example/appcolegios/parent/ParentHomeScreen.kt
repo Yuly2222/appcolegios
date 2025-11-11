@@ -69,20 +69,25 @@ fun ParentHomeScreen() {
     // Usar ProfileViewModel para obtener hijos reales
     val profileVm: ProfileViewModel = viewModel()
     val childrenList by profileVm.children.collectAsState()
-    var selectedChildIndex by remember { mutableStateOf(0) }
+    val selectedIndexState by profileVm.selectedChildIndex.collectAsState()
+    val selectedChildIndex = selectedIndexState ?: 0
+    val studentResult by profileVm.student.collectAsState()
+    val currentStudent = studentResult?.getOrNull()
+
     var showSelectChildDialog by remember { mutableStateOf(false) }
 
     // Estado calculado a partir del hijo seleccionado
     var state by remember { mutableStateOf(ParentDashboardState(loading = true)) }
 
-    LaunchedEffect(childrenList) {
-        // Si hay hijos, inicializar el estado con el primero
-        if (childrenList.isNotEmpty()) {
-            selectedChildIndex = 0
-            val s = childrenList[0]
-            state = mapStudentToDashboard(s, 0, childrenList)
+    // Cuando cambie el student seleccionado en el ViewModel, actualizar el dashboard
+    LaunchedEffect(currentStudent, childrenList) {
+        if (currentStudent != null) {
+            // mapear Student a la vista
+            state = mapStudentToDashboard(currentStudent, selectedChildIndex, childrenList)
+        } else if (childrenList.isNotEmpty()) {
+            // si no hay student pero hay hijos, usar el primero
+            profileVm.selectChildAtIndex(0)
         } else {
-            // Sin hijos: repetir estado vacío pero no loading
             state = ParentDashboardState(loading = false, children = emptyList())
         }
     }
@@ -182,8 +187,8 @@ fun ParentHomeScreen() {
                 confirmButton = {
                     TextButton(onClick = {
                         if (childrenList.isNotEmpty()) {
-                            selectedChildIndex = sel
-                            state = mapStudentToDashboard(childrenList[sel], sel, childrenList)
+                            // Actualizamos selección central en ViewModel
+                            profileVm.selectChildAtIndex(sel)
                         }
                         showSelectChildDialog = false
                     }) { Text("Aceptar") }

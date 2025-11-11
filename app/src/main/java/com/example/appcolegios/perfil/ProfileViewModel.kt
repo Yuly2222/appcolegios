@@ -105,15 +105,51 @@ class ProfileViewModel : ViewModel() {
     @Suppress("unused")
     val children: StateFlow<List<Student>> = _children
 
+    // Índice del hijo seleccionado por el padre (nullable hasta que se carguen hijos)
+    private val _selectedChildIndex = MutableStateFlow<Int?>(null)
+    val selectedChildIndex: StateFlow<Int?> = _selectedChildIndex
+
+    fun selectChildAtIndex(index: Int) {
+        val list = _children.value
+        if (index < 0 || index >= list.size) return
+        _selectedChildIndex.value = index
+        _student.value = Result.success(list[index])
+    }
+
     // Rol del usuario cargado desde Firestore (users y colecciones específicas)
     private val _roleString = MutableStateFlow<String?>(null)
     val roleString: StateFlow<String?> = _roleString
 
+    // Auth listener to react when user signs in after VM creation
+    private val authStateListener = FirebaseAuth.AuthStateListener {
+        // When auth state changes, re-fetch relevant data (only if user is signed in)
+        if (it.currentUser != null) {
+            loadStudentData()
+            loadTeacherData()
+            loadChildrenForParent()
+            loadRoleFromDb()
+        } else {
+            // clear state on sign out
+            _student.value = Result.success(null)
+            _children.value = emptyList()
+            _selectedChildIndex.value = null
+            _roleString.value = null
+        }
+    }
+
     init {
+        // Subscribe to auth state to reload data when user signs in/out
+        auth.addAuthStateListener(authStateListener)
+
         loadStudentData()
         loadTeacherData()
         loadChildrenForParent()
         loadRoleFromDb()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        try { auth.removeAuthStateListener(authStateListener) } catch (_: Exception) { }
     }
 
     private fun loadStudentData() {
@@ -121,20 +157,30 @@ class ProfileViewModel : ViewModel() {
             val userId = auth.currentUser?.uid
             if (userId != null) {
                 try {
-                    val studentDoc = db.collection("students").document(userId).get().await()
-                    if (studentDoc.exists()) {
+                    val studentDocSnap = db.collection("students").document(userId).get().await()
+                    if (studentDocSnap.exists()) {
                         Log.d(TAG, "loadStudentData: found students/$userId")
-                        val studentData = studentDoc.toObject(Student::class.java) ?: Student(id = userId)
+                        // Mapear manualmente para soportar campos 'nombre' o 'name'
+                        val studentData = Student(
+                            id = userId,
+                            nombre = com.example.appcolegios.util.FirestoreUtils.getPreferredName(studentDocSnap) ?: "",
+                            curso = studentDocSnap.getString("curso") ?: studentDocSnap.getString("course") ?: "",
+                            grupo = studentDocSnap.getString("grupo") ?: studentDocSnap.getString("group") ?: "",
+                            promedio = try { (studentDocSnap.getDouble("promedio") ?: studentDocSnap.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 },
+                            avatarUrl = studentDocSnap.getString("avatarUrl") ?: studentDocSnap.getString("photoUrl") ?: studentDocSnap.getString("avatar")
+                        )
+
                         // Intentar leer users/{uid} para completar/actualizar curso/grupo si existen allí
                         try {
                             val userDoc = db.collection("users").document(userId).get().await()
                             if (userDoc.exists()) {
                                 val cursoFromUser = userDoc.getString("curso") ?: userDoc.getString("course")
                                 val grupoFromUser = userDoc.getString("grupo") ?: userDoc.getString("group")
-                                // Si alguno de los campos viene en users, los aplicamos sobre studentData
                                 val merged = studentData.copy(
                                     curso = cursoFromUser ?: studentData.curso,
-                                    grupo = grupoFromUser ?: studentData.grupo
+                                    grupo = grupoFromUser ?: studentData.grupo,
+                                    nombre = studentData.nombre.ifBlank { com.example.appcolegios.util.FirestoreUtils.getPreferredName(userDoc) ?: studentData.nombre },
+                                    avatarUrl = studentData.avatarUrl ?: (userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar"))
                                 )
                                 Log.d(TAG, "loadStudentData: merged Student from students/$userId + users/$userId -> $merged")
                                 _student.value = Result.success(merged)
@@ -154,13 +200,11 @@ class ProfileViewModel : ViewModel() {
                                 val name = userDoc.getString("name") ?: userDoc.getString("displayName") ?: ""
                                 val curso = userDoc.getString("curso") ?: userDoc.getString("course") ?: ""
                                 val grupo = userDoc.getString("grupo") ?: userDoc.getString("group") ?: ""
-                                // Normalizar avatar: preferir avatarUrl/photoUrl/avatar; si solo hay base64 crudo convertir a data URL
                                 val rawAvatarUrl = userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar")
                                 val avatarBase64 = userDoc.getString("avatarBase64")
                                 val avatar = when {
                                     !rawAvatarUrl.isNullOrBlank() -> rawAvatarUrl
                                     !avatarBase64.isNullOrBlank() -> {
-                                        // si ya incluye prefijo data: lo dejamos, si no lo normalizamos a data:image/jpeg
                                         if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
                                     }
                                     else -> null
@@ -203,7 +247,7 @@ class ProfileViewModel : ViewModel() {
             try {
                 val doc = db.collection("teachers").document(userId).get().await()
                 if (doc.exists()) {
-                    val nombre = doc.getString("name") ?: doc.getString("displayName")
+                    val nombre = com.example.appcolegios.util.FirestoreUtils.getPreferredName(doc)
                     val email = doc.getString("email") ?: auth.currentUser?.email
                     val phone = doc.getString("phone")
                     val photoBase64 = doc.getString("photoBase64")
@@ -252,8 +296,28 @@ class ProfileViewModel : ViewModel() {
                     try {
                         val qParents = db.collection("students").whereArrayContains("parents", userId).get().await()
                         for (doc in qParents.documents) {
-                            val s = doc.toObject(Student::class.java)
-                            if (s != null) childrenList.add(s)
+                            // Mapear manualmente para aceptar 'nombre' o 'name'
+                            val id = doc.id
+                            val name = doc.getString("nombre") ?: doc.getString("name") ?: doc.getString("displayName") ?: ""
+                            val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
+                            val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
+                            val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
+                            val avatarBase64 = doc.getString("avatarBase64")
+                            val avatar = when {
+                                !rawAvatar.isNullOrBlank() -> rawAvatar
+                                !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
+                                else -> null
+                            }
+                            val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                            val mapped = Student(
+                                id = id,
+                                nombre = name,
+                                curso = curso,
+                                grupo = grupo,
+                                promedio = promedio,
+                                avatarUrl = avatar
+                            )
+                            childrenList.add(mapped)
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "loadChildrenForParent: error querying students.parents", e)
@@ -265,8 +329,27 @@ class ProfileViewModel : ViewModel() {
                     try {
                         val byIdQuery = db.collection("students").whereEqualTo("acudienteId", userId).get().await()
                         for (doc in byIdQuery.documents) {
-                            val s = doc.toObject(Student::class.java)
-                            if (s != null) childrenList.add(s)
+                            val id = doc.id
+                            val name = doc.getString("nombre") ?: doc.getString("name") ?: doc.getString("displayName") ?: ""
+                            val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
+                            val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
+                            val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
+                            val avatarBase64 = doc.getString("avatarBase64")
+                            val avatar = when {
+                                !rawAvatar.isNullOrBlank() -> rawAvatar
+                                !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
+                                else -> null
+                            }
+                            val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                            val mapped = Student(
+                                id = id,
+                                nombre = name,
+                                curso = curso,
+                                grupo = grupo,
+                                promedio = promedio,
+                                avatarUrl = avatar
+                            )
+                            childrenList.add(mapped)
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "loadChildrenForParent: error querying students.acudienteId", e)
@@ -278,8 +361,27 @@ class ProfileViewModel : ViewModel() {
                     try {
                         val byEmailQuery = db.collection("students").whereEqualTo("acudienteEmail", userEmail).get().await()
                         for (doc in byEmailQuery.documents) {
-                            val s = doc.toObject(Student::class.java)
-                            if (s != null) childrenList.add(s)
+                            val id = doc.id
+                            val name = doc.getString("nombre") ?: doc.getString("name") ?: doc.getString("displayName") ?: ""
+                            val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
+                            val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
+                            val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
+                            val avatarBase64 = doc.getString("avatarBase64")
+                            val avatar = when {
+                                !rawAvatar.isNullOrBlank() -> rawAvatar
+                                !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
+                                else -> null
+                            }
+                            val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                            val mapped = Student(
+                                id = id,
+                                nombre = name,
+                                curso = curso,
+                                grupo = grupo,
+                                promedio = promedio,
+                                avatarUrl = avatar
+                            )
+                            childrenList.add(mapped)
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "loadChildrenForParent: error querying students.acudienteEmail", e)
@@ -358,10 +460,46 @@ class ProfileViewModel : ViewModel() {
 
                 // Eliminar duplicados por id y actualizar estado
                 val deduped = childrenList.distinctBy { it.id }
-                _children.value = deduped
 
-                if (deduped.isNotEmpty()) {
-                    _student.value = Result.success(deduped[0])
+                // Rellenar nombres faltantes consultando users/{id} o students/{id}
+                val finalList = mutableListOf<Student>()
+                for (s in deduped) {
+                    if (s.nombre.isBlank()) {
+                        try {
+                            // Preferir students/{id} si existe
+                            val stDoc = try { db.collection("students").document(s.id).get().await() } catch (_: Exception) { null }
+                            val nameFromStudents = stDoc?.getString("nombre") ?: stDoc?.getString("name") ?: stDoc?.getString("displayName")
+                            if (!nameFromStudents.isNullOrBlank()) {
+                                finalList.add(s.copy(nombre = nameFromStudents))
+                                continue
+                            }
+                            val uDoc = try { db.collection("users").document(s.id).get().await() } catch (_: Exception) { null }
+                            val nameFromUsers = uDoc?.getString("name") ?: uDoc?.getString("displayName")
+                            if (!nameFromUsers.isNullOrBlank()) {
+                                finalList.add(s.copy(nombre = nameFromUsers))
+                                continue
+                            }
+                            finalList.add(s)
+                        } catch (_: Exception) {
+                            finalList.add(s)
+                        }
+                    } else {
+                        finalList.add(s)
+                    }
+                }
+
+                val resolved = finalList.toList()
+                _children.value = resolved
+
+                if (resolved.isNotEmpty()) {
+                    // Inicializar selección si aún no existe
+                    if (_selectedChildIndex.value == null) {
+                        _selectedChildIndex.value = 0
+                    }
+                    val idx = _selectedChildIndex.value ?: 0
+                    _student.value = Result.success(resolved.getOrNull(idx) ?: resolved[0])
+                } else {
+                    _student.value = Result.success(null)
                 }
 
             } catch (e: Exception) {

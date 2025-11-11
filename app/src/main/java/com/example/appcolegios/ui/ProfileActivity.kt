@@ -18,12 +18,16 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
+import androidx.lifecycle.ViewModelProvider
+import com.example.appcolegios.perfil.ProfileViewModel
 
 class ProfileActivity : AppCompatActivity() {
 
     private lateinit var firestore: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
     private lateinit var progressBar: ProgressBar
+    private lateinit var profileVm: ProfileViewModel
 
     // Views
     private lateinit var profileImage: ImageView
@@ -48,6 +52,7 @@ class ProfileActivity : AppCompatActivity() {
 
         firestore = FirebaseFirestore.getInstance()
         auth = FirebaseAuth.getInstance()
+        profileVm = ViewModelProvider(this).get(ProfileViewModel::class.java)
 
         initViews()
         // Antes de cargar datos académicos, comprobamos el rol para ocultar la sección si es ADMIN
@@ -75,7 +80,37 @@ class ProfileActivity : AppCompatActivity() {
         // Cargar y mostrar rol desde Firestore
         loadAndShowRole()
 
-        loadStudentData()
+        // Suscribirse al student provisto por ProfileViewModel y actualizar UI cuando esté disponible
+        lifecycleScope.launch {
+            profileVm.student.collectLatest { result ->
+                val student = result?.getOrNull()
+                runOnUiThread {
+                    progressBar.visibility = View.GONE
+                    if (student != null) {
+                        nameText.text = student.nombre.ifBlank { getString(R.string.no_student_data) }
+                        val curso = student.curso.ifBlank { "N/A" }
+                        val grupo = student.grupo.ifBlank { "N/A" }
+                        courseText.text = getString(R.string.course_group_format, curso, grupo)
+
+                        // promedio puede ser null/0.0 según mapeo; mostrar formato adecuado
+                        val avg = student.promedio
+                        averageText.text = if (avg != null && avg > 0.0) {
+                            String.format(Locale.getDefault(), "%.2f", avg)
+                        } else {
+                            getString(R.string.sample_average)
+                        }
+
+                        // Otros campos que no están en Student quedan como están o en blanco
+                        // (si se necesita más info, ProfileViewModel podría ampliarse)
+                    } else {
+                        nameText.text = getString(R.string.no_student_data)
+                    }
+                }
+            }
+        }
+
+        // Nota: no llamamos a loadStudentData() aquí para evitar lecturas directas duplicadas; ProfileViewModel
+        // ya realiza las lecturas necesarias y sincroniza el estado.
     }
 
     private fun initViews() {
@@ -136,6 +171,7 @@ class ProfileActivity : AppCompatActivity() {
             .addOnFailureListener { _ -> roleText.text = getString(R.string.role_na) }
     }
 
+    // Mantengo la función original como fallback (no es llamada por defecto)
     private fun loadStudentData() {
         val userId = auth.currentUser?.uid ?: return
         progressBar.visibility = View.VISIBLE
@@ -146,7 +182,7 @@ class ProfileActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
 
                 if (document.exists()) {
-                    nameText.text = document.getString("nombre") ?: getString(R.string.no_student_data)
+                    nameText.text = com.example.appcolegios.util.FirestoreUtils.getPreferredName(document) ?: getString(R.string.no_student_data)
                     val curso = document.getString("curso") ?: "N/A"
                     val grupo = document.getString("grupo") ?: "N/A"
                     courseText.text = getString(R.string.course_group_format, curso, grupo)

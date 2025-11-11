@@ -12,6 +12,7 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.tasks.await
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.example.appcolegios.util.FirestoreUtils
 
 @Composable
 fun AdminProfileDetailScreen(navController: NavController? = null, userId: String) {
@@ -29,14 +30,14 @@ fun AdminProfileDetailScreen(navController: NavController? = null, userId: Strin
         try {
             val doc = db.collection("users").document(userId).get().await()
             if (doc.exists()) {
-                displayName = doc.getString("displayName") ?: doc.getString("name") ?: ""
+                displayName = FirestoreUtils.getPreferredName(doc) ?: ""
                 email = doc.getString("email") ?: ""
                 role = doc.getString("role") ?: ""
             } else {
                 // intentar en students/teachers
                 val s = db.collection("students").document(userId).get().await()
                 if (s.exists()) {
-                    displayName = s.getString("nombre") ?: ""
+                    displayName = FirestoreUtils.getPreferredName(s) ?: ""
                     email = s.getString("email") ?: ""
                     role = s.getString("role") ?: "ESTUDIANTE"
                 }

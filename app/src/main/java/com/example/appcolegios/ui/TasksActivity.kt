@@ -5,6 +5,8 @@ import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.appcolegios.R
@@ -13,11 +15,15 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import com.example.appcolegios.perfil.ProfileViewModel
 
 class TasksActivity : AppCompatActivity() {
 
     private lateinit var firestore: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
+    private lateinit var profileVm: ProfileViewModel
 
     private lateinit var tasksRecyclerView: RecyclerView
     private lateinit var emptyStateText: TextView
@@ -34,11 +40,20 @@ class TasksActivity : AppCompatActivity() {
 
         firestore = FirebaseFirestore.getInstance()
         auth = FirebaseAuth.getInstance()
+        profileVm = ViewModelProvider(this).get(ProfileViewModel::class.java)
 
         initViews()
         setupRecyclerView()
         setupFilters()
-        loadTasks()
+
+        // Observamos el student seleccionado y recargamos tareas
+        lifecycleScope.launch {
+            profileVm.student.collectLatest { result ->
+                val student = result?.getOrNull()
+                val targetId = student?.id ?: auth.currentUser?.uid ?: ""
+                loadTasksForTarget(targetId)
+            }
+        }
     }
 
     private fun initViews() {
@@ -57,27 +72,46 @@ class TasksActivity : AppCompatActivity() {
     private fun setupFilters() {
         chipAll.setOnClickListener {
             currentFilter = "all"
-            loadTasks()
+            // reload current student
+            lifecycleScope.launch {
+                val student = profileVm.student.value?.getOrNull()
+                val targetId = student?.id ?: auth.currentUser?.uid ?: ""
+                loadTasksForTarget(targetId)
+            }
         }
 
         chipPending.setOnClickListener {
             currentFilter = "pending"
-            loadTasks()
+            lifecycleScope.launch {
+                val student = profileVm.student.value?.getOrNull()
+                val targetId = student?.id ?: auth.currentUser?.uid ?: ""
+                loadTasksForTarget(targetId)
+            }
         }
 
         chipCompleted.setOnClickListener {
             currentFilter = "completed"
-            loadTasks()
+            lifecycleScope.launch {
+                val student = profileVm.student.value?.getOrNull()
+                val targetId = student?.id ?: auth.currentUser?.uid ?: ""
+                loadTasksForTarget(targetId)
+            }
         }
     }
 
-    private fun loadTasks() {
-        val userId = auth.currentUser?.uid ?: return
+    private fun loadTasksForTarget(targetId: String) {
         progressBar.visibility = View.VISIBLE
         emptyStateText.visibility = View.GONE
 
+        if (targetId.isBlank()) {
+            progressBar.visibility = View.GONE
+            emptyStateText.visibility = View.VISIBLE
+            emptyStateText.setText(R.string.no_student_data)
+            return
+        }
+
         var query: Query = firestore.collection("tasks")
-            .whereEqualTo("studentId", userId)
+            .whereEqualTo("studentId", targetId)
             .orderBy("deadline", Query.Direction.ASCENDING)
 
         // Aplicar filtro
@@ -92,21 +126,26 @@ class TasksActivity : AppCompatActivity() {
 
                 if (documents.isEmpty) {
                     emptyStateText.visibility = View.VISIBLE
+                    // Intentar resolver los recursos por nombre (evita dependencia en R.string si no se han regenerado los recursos)
+                    val pendingId = resources.getIdentifier("no_pending_tasks", "string", packageName)
+                    val completedId = resources.getIdentifier("no_completed_tasks", "string", packageName)
+                    val availableId = resources.getIdentifier("no_tasks_available", "string", packageName)
                     emptyStateText.text = when (currentFilter) {
-                        "pending" -> "No hay tareas pendientes"
-                        "completed" -> "No hay tareas completadas"
-                        else -> "No hay tareas disponibles"
+                        "pending" -> if (pendingId != 0) getString(pendingId) else "No hay tareas pendientes"
+                        "completed" -> if (completedId != 0) getString(completedId) else "No hay tareas completadas"
+                        else -> if (availableId != 0) getString(availableId) else "No hay tareas disponibles"
                     }
                 } else {
                     // Aquí iría el adaptador con los datos
                     // val tasks = documents.map { it.toObject(Task::class.java) }
                     // tasksAdapter.submitList(tasks)
+                    emptyStateText.visibility = View.GONE
                 }
             }
             .addOnFailureListener { e ->
                 progressBar.visibility = View.GONE
                 Snackbar.make(tasksRecyclerView, "Error al cargar tareas: ${e.message}", Snackbar.LENGTH_LONG)
-                    .setAction("Reintentar") { loadTasks() }
+                    .setAction("Reintentar") { loadTasksForTarget(targetId) }
                     .show()
             }
     }

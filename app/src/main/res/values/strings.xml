@@ -73,6 +73,9 @@
     <!-- Nuevos strings para pantallas académicas y asistencia -->
     <string name="error_label">Error</string>
     <string name="no_tasks_for_today">No hay tareas para hoy</string>
+    <string name="no_pending_tasks">No hay tareas pendientes</string>
+    <string name="no_completed_tasks">No hay tareas completadas</string>
+    <string name="no_tasks_available">No hay tareas disponibles</string>
     <string name="promedio_global">Promedio global</string>
     <string name="mes_anterior">Mes anterior</string>
     <string name="mes_siguiente">Mes siguiente</string>

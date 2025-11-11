@@ -5,6 +5,8 @@ import android.view.View
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.appcolegios.R
@@ -12,12 +14,16 @@ import com.google.android.material.snackbar.Snackbar
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import java.util.*
+import com.example.appcolegios.perfil.ProfileViewModel
 
 class GradesActivity : AppCompatActivity() {
 
     private lateinit var firestore: FirebaseFirestore
     private lateinit var auth: FirebaseAuth
+    private lateinit var profileVm: ProfileViewModel
 
     private lateinit var gradesRecyclerView: RecyclerView
     private lateinit var averageText: TextView
@@ -29,10 +35,20 @@ class GradesActivity : AppCompatActivity() {
 
         firestore = FirebaseFirestore.getInstance()
         auth = FirebaseAuth.getInstance()
+        profileVm = ViewModelProvider(this).get(ProfileViewModel::class.java)
 
         initViews()
         setupRecyclerView()
-        loadGrades()
+
+        // Observamos el student seleccionado desde ProfileViewModel; cuando cambie recargamos notas
+        lifecycleScope.launch {
+            profileVm.student.collectLatest { result ->
+                val student = result?.getOrNull()
+                val targetId = student?.id ?: auth.currentUser?.uid ?: ""
+                val studentName = student?.nombre?.takeIf { it.isNotBlank() }
+                loadGradesForTarget(targetId, studentName)
+            }
+        }
     }
 
     private fun initViews() {
@@ -45,12 +61,21 @@ class GradesActivity : AppCompatActivity() {
         gradesRecyclerView.layoutManager = LinearLayoutManager(this)
     }
 
-    private fun loadGrades() {
-        val userId = auth.currentUser?.uid ?: return
-        progressBar.visibility = View.VISIBLE
+    private fun loadGradesForTarget(targetId: String, studentName: String?) {
+        if (targetId.isBlank()) {
+            progressBar.visibility = View.GONE
+            Snackbar.make(gradesRecyclerView, "Usuario no identificado", Snackbar.LENGTH_LONG).show()
+            return
+        }
 
+        // Opcional: mostrar nombre en la Toolbar si se conoce
+        if (!studentName.isNullOrBlank()) {
+            supportActionBar?.title = "Notas: $studentName"
+        }
+
+        progressBar.visibility = View.VISIBLE
         firestore.collection("grades")
-            .whereEqualTo("studentId", userId)
+            .whereEqualTo("studentId", targetId)
             .orderBy("materia", Query.Direction.ASCENDING)
             .get()
             .addOnSuccessListener { documents ->
@@ -63,8 +88,6 @@ class GradesActivity : AppCompatActivity() {
                     averageText.text = String.format(Locale.getDefault(), "%.2f", average)
 
                     // Aquí iría el adaptador con las calificaciones
-                    // val gradesList = documents.map { it.toObject(Grade::class.java) }
-                    // gradesAdapter.submitList(gradesList)
                 } else {
                     averageText.text = "N/A"
                 }
@@ -72,7 +95,7 @@ class GradesActivity : AppCompatActivity() {
             .addOnFailureListener { e ->
                 progressBar.visibility = View.GONE
                 Snackbar.make(gradesRecyclerView, "Error al cargar notas: ${e.message}", Snackbar.LENGTH_LONG)
-                    .setAction("Reintentar") { loadGrades() }
+                    .setAction("Reintentar") { loadGradesForTarget(targetId, studentName) }
                     .show()
             }
     }

@@ -28,6 +28,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.TextButton
+import kotlinx.coroutines.flow.collectLatest
 
 // Nuevo modelo simple para pagos
 data class Pago(
@@ -50,22 +51,23 @@ fun PaymentsScreen() {
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val profileVm: ProfileViewModel = viewModel()
     val children by profileVm.children.collectAsState()
+    val selectedIndexState by profileVm.selectedChildIndex.collectAsState()
+    val selectedChildIndex = selectedIndexState ?: 0
     val isParent = (userData.role ?: "").equals("PARENT", ignoreCase = true) || (userData.role ?: "").equals("PADRE", ignoreCase = true)
 
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
 
     var showSelectChildDialog by remember { mutableStateOf(false) }
-    var selectedChildIndex by remember { mutableStateOf(0) }
 
     var payments by remember { mutableStateOf<List<Pago>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
-    val currentUserId = auth.currentUser?.uid
-
-    // Determinar id objetivo: si es padre, usar el hijo seleccionado; si no, usar usuario actual
-    val targetId = if (isParent) children.getOrNull(selectedChildIndex)?.id else currentUserId
+    // Observamos el student seleccionado centralmente
+    val studentResult by profileVm.student.collectAsState()
+    val currentStudent = studentResult?.getOrNull()
+    val targetId = if (isParent) currentStudent?.id else auth.currentUser?.uid
 
     LaunchedEffect(targetId) {
         payments = emptyList()
@@ -74,7 +76,7 @@ fun PaymentsScreen() {
         errorMsg = null
         try {
             val baseQuery = firestore.collection("pagos").whereEqualTo("studentId", targetId).orderBy("fecha", com.google.firebase.firestore.Query.Direction.DESCENDING)
-            val query = baseQuery // no filtros adicionales por ahora, patrón inmutable aplicado
+            val query = baseQuery
             val snaps = query.get().await()
             val list = mutableListOf<Pago>()
             for (doc in snaps.documents) {
@@ -109,7 +111,7 @@ fun PaymentsScreen() {
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // Selector de hijo si es padre
+            // Selector de hijo si es padre: usar selección centralizada en ProfileViewModel
             if (isParent) {
                 Card(
                     modifier = Modifier.fillMaxWidth().clickable(enabled = children.isNotEmpty()) { showSelectChildDialog = true },
@@ -139,7 +141,10 @@ fun PaymentsScreen() {
                         }
                     }, confirmButton = {
                         TextButton(onClick = {
-                            if (children.isNotEmpty()) selectedChildIndex = sel
+                            if (children.isNotEmpty()) {
+                                // Actualizamos la selección en ProfileViewModel para que todas las pantallas se sincronicen
+                                profileVm.selectChildAtIndex(sel)
+                            }
                             showSelectChildDialog = false
                         }) { Text("Aceptar") }
                     }, dismissButton = {
