@@ -285,6 +285,7 @@ private fun HomeContent(ui: HomeUiState, onNavigate: (String) -> Unit) {
             Role.ADMIN -> buildList {
                 add(QuickTile(stringResource(R.string.notifications)) { onNavigate(AppRoutes.Notifications.route) })
                 add(QuickTile(stringResource(R.string.messages)) { onNavigate(AppRoutes.Messages.route) })
+                add(QuickTile("Padres") { onNavigate(AppRoutes.AdminParents.route) })
                 add(QuickTile(stringResource(R.string.calendar)) { onNavigate(AppRoutes.Calendar.route) })
                 // Se elimina el QuickTile de "Dashboard" aquí porque ya existe la tarjeta principal
                 // en la sección de Administración (evita duplicado en el panel admin)

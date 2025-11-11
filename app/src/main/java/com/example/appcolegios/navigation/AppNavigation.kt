@@ -62,6 +62,7 @@ import com.example.appcolegios.perfil.ProfileScreen
 import com.example.appcolegios.transporte.TransportScreen
 import com.example.appcolegios.admin.AdminScreen
 import com.example.appcolegios.admin.AdminUsersScreen
+import com.example.appcolegios.admin.AdminParentsScreen
 import com.example.appcolegios.ubicacion.UbicacionScreen
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
@@ -199,6 +200,7 @@ fun AppNavigation(
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Schedule.route) { ScheduleScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController) }
+            composable(AppRoutes.AdminParents.route) { AdminParentsScreen(onDone = { navController?.popBackStack() }) }
             composable(
                 route = com.example.appcolegios.navigation.AppRoutes.AdminUsers.route,
                 arguments = listOf(navArgument("mode") { type = NavType.StringType; defaultValue = "view" })
