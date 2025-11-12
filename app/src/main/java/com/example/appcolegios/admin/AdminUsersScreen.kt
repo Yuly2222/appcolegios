@@ -49,11 +49,6 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
     var notifTitle by remember { mutableStateOf("") }
     var notifBody by remember { mutableStateOf("") }
 
-    // Usar el diálogo central AssignGroupDialog: estado local para abrirlo
-    var showAssignGroupDialog by remember { mutableStateOf(false) }
-    var assignDialogInitialIdentifier by remember { mutableStateOf<String?>(null) }
-    var assignDialogInitialTargetType by remember { mutableStateOf<String?>(null) }
-
     LaunchedEffect(Unit) {
         isLoading = true
         try {
@@ -159,9 +154,7 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
                                     // Abrir el AssignGroupDialog centralizado
                                     TextButton(onClick = {
                                         actionsOpen = false
-                                        assignDialogInitialIdentifier = id
-                                        assignDialogInitialTargetType = "teacher"
-                                        showAssignGroupDialog = true
+                                        try { navController?.navigate(com.example.appcolegios.navigation.AppRoutes.AssignGroup.route) } catch (_: Exception) {}
                                     }) { Text("Asignar curso") }
                                     Spacer(Modifier.height(6.dp))
                                     TextButton(onClick = {
@@ -245,15 +238,6 @@ fun AdminUsersScreen(navController: NavController? = null, mode: String = "view"
                     composeNotificationForUserName = null
                 }) { Text("Enviar") }
             }, dismissButton = { TextButton(onClick = { composeNotificationForUserId = null; composeNotificationForUserName = null }) { Text("Cancelar") } })
-        }
-
-        // New: Assign dialog for teacher/student
-        if (showAssignGroupDialog) {
-            AssignGroupDialog(
-                onDismiss = { showAssignGroupDialog = false },
-                initialIdentifier = assignDialogInitialIdentifier,
-                initialTargetType = assignDialogInitialTargetType
-            )
         }
     }
 }

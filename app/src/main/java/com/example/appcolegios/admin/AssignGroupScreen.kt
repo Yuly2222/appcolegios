@@ -54,7 +54,7 @@ fun AssignGroupScreen(navController: NavController?) {
                             val email = line.trim().takeIf { it.contains("@") }
                             if (email != null) {
                                 processed++
-                                val result = assignToCourseAndGroup(db, email, curso, grupo)
+                                val result = AdminHelpers.assignToCourseAndGroup(db, email, curso, grupo)
                                 if (result) assigned++
                             }
                         }
@@ -156,7 +156,7 @@ fun AssignGroupScreen(navController: NavController?) {
                              dialogMessage = null
                              scope.launch {
                                  try {
-                                     val uid = findUidByIdentifier(db, identifier)
+                                     val uid = AdminHelpers.findUidByIdentifier(db, identifier)
                                      if (uid == null) {
                                          dialogMessage = "No se encontró docente/usuario con ese email/uid"
                                      } else {
@@ -193,7 +193,7 @@ fun AssignGroupScreen(navController: NavController?) {
                          dialogMessage = null
                          scope.launch {
                              try {
-                                 val success = assignToCourseAndGroup(db, identifier, curso, grupo)
+                                 val success = AdminHelpers.assignToCourseAndGroup(db, identifier, curso, grupo)
                                  if (success) dialogMessage = "Asignación completada y perfil actualizado"
                                  else dialogMessage = "No se encontró usuario/docente; se creó un registro en teachers si fue posible."
                              } catch (e: Exception) {
@@ -210,7 +210,7 @@ fun AssignGroupScreen(navController: NavController?) {
                          dialogMessage = null
                          scope.launch {
                              try {
-                                 val uid = findUidByIdentifier(db, identifier)
+                                 val uid = AdminHelpers.findUidByIdentifier(db, identifier)
                                  if (uid == null) {
                                      dialogMessage = "No se encontró usuario/docente"
                                  } else {

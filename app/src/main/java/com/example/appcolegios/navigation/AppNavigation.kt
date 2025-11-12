@@ -201,7 +201,7 @@ fun AppNavigation(
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
             composable(AppRoutes.Schedule.route) { ScheduleScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController) }
-            composable(AppRoutes.AssignGroup.route) { AssignGroupScreen(navController) }
+            composable(AppRoutes.AssignGroup.route) { com.example.appcolegios.admin.AssignGroupAdminScreen(navController = navController) }
             composable(AppRoutes.AdminParents.route) { AdminParentsScreen(onDone = { navController?.popBackStack() }) }
             composable(
                 route = com.example.appcolegios.navigation.AppRoutes.AdminUsers.route,
