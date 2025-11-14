@@ -102,6 +102,19 @@ fun ProfileScreen(navController: NavController? = null) {
                     intent.putExtra("fromAdmin", true)
                     context.startActivity(intent)
                 })
+
+                Spacer(Modifier.height(12.dp))
+                // Botón de administración para rellenar campos de foto desde Base64 (backfill)
+                OutlinedButton(onClick = {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Iniciando backfill de fotos...")
+                        profileViewModel.backfillMissingPhotoUrls { msg ->
+                            coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+                        }
+                    }
+                }) {
+                    Text("Backfill fotos")
+                }
             } else {
                 if (isDocente) {
                     // Mostrar formulario editable para docentes

@@ -111,6 +111,34 @@ object AdminHelpers {
                 db.collection("users").document(uid).set(userUpdates, com.google.firebase.firestore.SetOptions.merge()).await()
             } catch (_: Exception) {}
 
+            // Si se creó/actualizó un grupo, intentar asegurarse de que exista en Grades (si el uid corresponde a un estudiante)
+            if (groupKey != null) {
+                try {
+                    val normalized = groupKey.trim().lowercase()
+                    // comprobar si es un estudiante
+                    val sDoc = db.collection("students").document(uid).get().await()
+                    if (sDoc.exists()) {
+                        // Obtener email a guardar
+                        var emailToStore = ""
+                        try {
+                            val u = db.collection("users").document(uid).get().await()
+                            if (u.exists()) emailToStore = u.getString("email") ?: ""
+                        } catch (_: Exception) { }
+                        if (emailToStore.isBlank()) {
+                            try { emailToStore = sDoc.getString("email") ?: "" } catch (_: Exception) { }
+                        }
+                        val studentEntry = mapOf(
+                            "uid" to uid,
+                            "email" to emailToStore,
+                            "assignedAt" to Timestamp.now()
+                        )
+                        try {
+                            db.collection("Grades").document(normalized).collection("students").document(uid).set(studentEntry).await()
+                        } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
+            }
+
             return true
         } catch (e: Exception) {
             return false
@@ -146,6 +174,33 @@ object AdminHelpers {
             if (updates.isNotEmpty()) {
                 db.collection("users").document(uid).set(updates, com.google.firebase.firestore.SetOptions.merge()).await()
             }
+
+            // También crear/actualizar Grades si corresponde a estudiante
+            if (groupKey != null) {
+                try {
+                    val normalized = groupKey.trim().lowercase()
+                    val sDoc = db.collection("students").document(uid).get().await()
+                    if (sDoc.exists()) {
+                        var emailToStore = ""
+                        try {
+                            val u = db.collection("users").document(uid).get().await()
+                            if (u.exists()) emailToStore = u.getString("email") ?: ""
+                        } catch (_: Exception) { }
+                        if (emailToStore.isBlank()) {
+                            try { emailToStore = sDoc.getString("email") ?: "" } catch (_: Exception) { }
+                        }
+                        val studentEntry = mapOf(
+                            "uid" to uid,
+                            "email" to emailToStore,
+                            "assignedAt" to Timestamp.now()
+                        )
+                        try {
+                            db.collection("Grades").document(normalized).collection("students").document(uid).set(studentEntry).await()
+                        } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
+            }
+
             return true
         } catch (e: Exception) {
             return false

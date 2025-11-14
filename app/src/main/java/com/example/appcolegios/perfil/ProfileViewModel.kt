@@ -152,6 +152,22 @@ class ProfileViewModel : ViewModel() {
         try { auth.removeAuthStateListener(authStateListener) } catch (_: Exception) { }
     }
 
+    private fun normalizeCourseKey(raw: String?): Pair<String, String> {
+        val r = raw?.trim() ?: ""
+        if (r.contains("-")) {
+            val parts = r.split("-")
+            val cursoPart = parts.getOrNull(0)?.trim() ?: ""
+            val grupoPart = parts.getOrNull(1)?.trim() ?: ""
+            val grupoUpper = if (grupoPart.isNotBlank()) grupoPart.uppercase() else ""
+            val cursoDisplay = if (cursoPart.isNotBlank()) {
+                if (grupoUpper.isNotBlank()) "${cursoPart}-${grupoUpper}" else cursoPart
+            } else r
+            return Pair(cursoDisplay, grupoUpper)
+        }
+        // si no contiene '-', intentar usar raw curso y dejar grupo vacío
+        return Pair(r, "")
+    }
+
     private fun loadStudentData() {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid
@@ -161,27 +177,66 @@ class ProfileViewModel : ViewModel() {
                     if (studentDocSnap.exists()) {
                         Log.d(TAG, "loadStudentData: found students/$userId")
                         // Mapear manualmente para soportar campos 'nombre' o 'name'
+                        val rawCurso = studentDocSnap.getString("curso") ?: studentDocSnap.getString("course") ?: ""
+                        val rawGrupo = studentDocSnap.getString("grupo") ?: studentDocSnap.getString("group") ?: ""
+                        val (cursoFromRaw, grupoFromRaw) = normalizeCourseKey(rawCurso)
+
                         val studentData = Student(
                             id = userId,
                             nombre = com.example.appcolegios.util.FirestoreUtils.getPreferredName(studentDocSnap) ?: "",
-                            curso = studentDocSnap.getString("curso") ?: studentDocSnap.getString("course") ?: "",
-                            grupo = studentDocSnap.getString("grupo") ?: studentDocSnap.getString("group") ?: "",
+                            curso = if (cursoFromRaw.isNotBlank()) cursoFromRaw else studentDocSnap.getString("curso") ?: studentDocSnap.getString("course") ?: "",
+                            grupo = if (grupoFromRaw.isNotBlank()) grupoFromRaw else rawGrupo,
                             promedio = try { (studentDocSnap.getDouble("promedio") ?: studentDocSnap.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 },
                             avatarUrl = studentDocSnap.getString("avatarUrl") ?: studentDocSnap.getString("photoUrl") ?: studentDocSnap.getString("avatar")
                         )
+
+                        // Si no hay curso/grupo explícitos, intentar desde el array 'grupos' (compatibilidad con AssignGroupAdminScreen)
+                        val gruposArray = try { studentDocSnap.get("grupos") as? List<*> } catch (_: Exception) { null }
+                        val fallbackFromGrupos = if ((studentData.curso.isBlank() || studentData.grupo.isBlank()) && !gruposArray.isNullOrEmpty()) {
+                            val first = gruposArray.firstOrNull()?.toString()?.trim() ?: ""
+                            if (first.contains("-")) {
+                                val parts = first.split("-")
+                                val cursoPart = parts.getOrNull(0)?.trim() ?: ""
+                                val grupoPart = parts.getOrNull(1)?.trim() ?: ""
+                                val cursoDisplay = if (cursoPart.isNotBlank() && grupoPart.isNotBlank()) "${cursoPart}-${grupoPart.uppercase()}" else first
+                                studentData.copy(curso = cursoDisplay, grupo = grupoPart.uppercase())
+                            } else {
+                                studentData.copy(curso = first)
+                            }
+                        } else studentData
 
                         // Intentar leer users/{uid} para completar/actualizar curso/grupo si existen allí
                         try {
                             val userDoc = db.collection("users").document(userId).get().await()
                             if (userDoc.exists()) {
-                                val cursoFromUser = userDoc.getString("curso") ?: userDoc.getString("course")
-                                val grupoFromUser = userDoc.getString("grupo") ?: userDoc.getString("group")
-                                val merged = studentData.copy(
-                                    curso = cursoFromUser ?: studentData.curso,
-                                    grupo = grupoFromUser ?: studentData.grupo,
-                                    nombre = studentData.nombre.ifBlank { com.example.appcolegios.util.FirestoreUtils.getPreferredName(userDoc) ?: studentData.nombre },
-                                    avatarUrl = studentData.avatarUrl ?: (userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar"))
+                                val cursoFromUserRaw = userDoc.getString("curso") ?: userDoc.getString("course")
+                                val grupoFromUserRaw = userDoc.getString("grupo") ?: userDoc.getString("group")
+                                val (cursoNormalized, grupoNormalized) = normalizeCourseKey(cursoFromUserRaw ?: "")
+                                val merged = fallbackFromGrupos.copy(
+                                    curso = if (cursoNormalized.isNotBlank()) cursoNormalized else fallbackFromGrupos.curso,
+                                    grupo = if (grupoNormalized.isNotBlank()) grupoNormalized else (grupoFromUserRaw ?: fallbackFromGrupos.grupo),
+                                    nombre = fallbackFromGrupos.nombre.ifBlank { com.example.appcolegios.util.FirestoreUtils.getPreferredName(userDoc) ?: fallbackFromGrupos.nombre },
+                                    avatarUrl = fallbackFromGrupos.avatarUrl ?: (userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar"))
                                 )
+                                // Si aún no hay curso/grupo, intentar obtenerlos desde users.grupos
+                                if ((merged.curso.isBlank() || merged.grupo.isBlank())) {
+                                    val userGrupos = try { userDoc.get("grupos") as? List<*> } catch (_: Exception) { null }
+                                    if (!userGrupos.isNullOrEmpty()) {
+                                        val first = userGrupos.firstOrNull()?.toString()?.trim() ?: ""
+                                        if (first.isNotBlank()) {
+                                            if (first.contains("-")) {
+                                                val parts = first.split("-")
+                                                val cursoPart = parts.getOrNull(0)?.trim() ?: ""
+                                                val grupoPart = parts.getOrNull(1)?.trim() ?: ""
+                                                val cursoDisplay = if (cursoPart.isNotBlank() && grupoPart.isNotBlank()) "${cursoPart}-${grupoPart.uppercase()}" else first
+                                                merged.copy(curso = cursoDisplay, grupo = grupoPart.uppercase())
+                                            } else {
+                                                merged.copy(curso = first)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Log.d(TAG, "loadStudentData: merged Student from students/$userId + users/$userId -> $merged")
                                 _student.value = Result.success(merged)
                                 return@launch
@@ -189,7 +244,7 @@ class ProfileViewModel : ViewModel() {
                         } catch (e: Exception) {
                             Log.w(TAG, "loadStudentData: error reading users/$userId while merging", e)
                         }
-                        _student.value = Result.success(studentData)
+                        _student.value = Result.success(fallbackFromGrupos)
                     } else {
                         Log.d(TAG, "loadStudentData: students/$userId not found, trying users/$userId")
                         // Intentar leer desde users/{uid} cuando no exista students/{uid}
@@ -198,23 +253,22 @@ class ProfileViewModel : ViewModel() {
                             if (userDoc.exists()) {
                                 Log.d(TAG, "loadStudentData: found users/$userId, fields: name=${userDoc.getString("name")}, curso=${userDoc.getString("curso")}, grupo=${userDoc.getString("grupo")}, avatarUrlExists=${userDoc.getString("avatarUrl") != null || userDoc.getString("avatarBase64") != null}")
                                 val name = userDoc.getString("name") ?: userDoc.getString("displayName") ?: ""
-                                val curso = userDoc.getString("curso") ?: userDoc.getString("course") ?: ""
-                                val grupo = userDoc.getString("grupo") ?: userDoc.getString("group") ?: ""
-                                val rawAvatarUrl = userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar")
+                                val rawCurso = userDoc.getString("curso") ?: userDoc.getString("course") ?: ""
+                                val rawGrupo = userDoc.getString("grupo") ?: userDoc.getString("group") ?: ""
+                                val (cursoNormalized, grupoNormalized) = normalizeCourseKey(rawCurso)
+                                val grupoFinal = if (grupoNormalized.isNotBlank()) grupoNormalized else rawGrupo
                                 val avatarBase64 = userDoc.getString("avatarBase64")
                                 val avatar = when {
-                                    !rawAvatarUrl.isNullOrBlank() -> rawAvatarUrl
-                                    !avatarBase64.isNullOrBlank() -> {
-                                        if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
-                                    }
+                                    !avatarBase64.isNullOrBlank() -> "data:image/jpeg;base64,$avatarBase64"
+                                    !rawGrupo.isNullOrBlank() -> null
                                     else -> null
                                 }
                                 val promedio = try { (userDoc.getDouble("promedio") ?: userDoc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
                                 val mapped = Student(
                                     id = userId,
                                     nombre = name,
-                                    curso = curso,
-                                    grupo = grupo,
+                                    curso = cursoNormalized.ifBlank { rawCurso },
+                                    grupo = grupoFinal,
                                     promedio = promedio,
                                     avatarUrl = avatar
                                 )
@@ -282,7 +336,7 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-    // Cargar hijos asociados al padre actual. Busca en 'students' por 'acudienteId' y por 'acudienteEmail' como fallback.
+    // Cargar hijos asociados al padre actual. Busca en 'students' por 'parents' que contenga userId
     private fun loadChildrenForParent() {
         viewModelScope.launch {
             val userId = auth.currentUser?.uid
@@ -556,12 +610,13 @@ class ProfileViewModel : ViewModel() {
 
                 if (!photoUrl.isNullOrBlank()) {
                     if (photoUrl.startsWith("data:")) {
-                        // Almacenar como photoBase64 (sin el prefijo 'data:...;base64,')
+                        // Almacenar como photoBase64 (sin el prefijo 'data:...;base64,') y mantener la URL legible
                         val base64 = photoUrl.substringAfter(",", photoUrl)
                         updates["photoBase64"] = base64
-                        // también guardar un campo legible
-                        updates["photoUrl"] = null
+                        // mantener campo legible con data URI para evitar que la UI se quede en blanco
+                        updates["photoUrl"] = photoUrl
                     } else {
+                        // URL remota: guardar en photoUrl y borrar photoBase64 para evitar conflictos
                         updates["photoUrl"] = photoUrl
                         updates["photoBase64"] = null
                     }
@@ -610,7 +665,9 @@ class ProfileViewModel : ViewModel() {
                 val teacherRef = db.collection("teachers").document(uid)
                 val userRef = db.collection("users").document(uid)
                 val map = mapOf(
-                    "photoBase64" to base64
+                    "photoBase64" to base64,
+                    // guardar también la URL legible para lectura inmediata en la UI
+                    "photoUrl" to dataUri
                 )
                 teacherRef.set(map, SetOptions.merge()).await()
                 userRef.set(map, SetOptions.merge()).await()
@@ -657,7 +714,9 @@ class ProfileViewModel : ViewModel() {
 
                 val map = mapOf(
                     "avatarBase64" to base64,
-                    "avatar" to dataUri
+                    "avatar" to dataUri,
+                    // mantener avatarUrl también por consistencia con lectura
+                    "avatarUrl" to dataUri
                 )
 
                 userRef.set(map, SetOptions.merge()).await()
@@ -670,6 +729,83 @@ class ProfileViewModel : ViewModel() {
             } catch (e: Exception) {
                 Log.w(TAG, "uploadStudentPhotoAsBase64WithResolver: error", e)
                 callback(null, e.message ?: "Error desconocido")
+            }
+        }
+    }
+
+    // Utilidad administrativa: si existen campos *Base64 pero no existe el campo legible (photoUrl/avatarUrl), rellenarlos
+    fun backfillMissingPhotoUrls(callback: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            var updated = 0
+            try {
+                // users
+                try {
+                    val users = db.collection("users").get().await()
+                    for (d in users.documents) {
+                        try {
+                            val id = d.id
+                            val pb = d.getString("photoBase64")
+                            val pr = d.getString("photoUrl")
+                            val ab = d.getString("avatarBase64")
+                            val ar = d.getString("avatarUrl")
+                            val updates = mutableMapOf<String, Any?>()
+                            if (!pb.isNullOrBlank() && pr.isNullOrBlank()) {
+                                updates["photoUrl"] = "data:image/jpeg;base64,$pb"
+                            }
+                            if (!ab.isNullOrBlank() && ar.isNullOrBlank()) {
+                                updates["avatarUrl"] = if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab"
+                            }
+                            if (updates.isNotEmpty()) {
+                                db.collection("users").document(id).set(updates, SetOptions.merge()).await()
+                                updated++
+                            }
+                        } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
+
+                // teachers
+                try {
+                    val docs = db.collection("teachers").get().await()
+                    for (d in docs.documents) {
+                        try {
+                            val id = d.id
+                            val pb = d.getString("photoBase64")
+                            val pr = d.getString("photoUrl")
+                            val updates = mutableMapOf<String, Any?>()
+                            if (!pb.isNullOrBlank() && pr.isNullOrBlank()) {
+                                updates["photoUrl"] = "data:image/jpeg;base64,$pb"
+                            }
+                            if (updates.isNotEmpty()) {
+                                db.collection("teachers").document(id).set(updates, SetOptions.merge()).await()
+                                updated++
+                            }
+                        } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
+
+                // students
+                try {
+                    val docs = db.collection("students").get().await()
+                    for (d in docs.documents) {
+                        try {
+                            val id = d.id
+                            val ab = d.getString("avatarBase64")
+                            val ar = d.getString("avatarUrl")
+                            val updates = mutableMapOf<String, Any?>()
+                            if (!ab.isNullOrBlank() && ar.isNullOrBlank()) {
+                                updates["avatarUrl"] = if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab"
+                            }
+                            if (updates.isNotEmpty()) {
+                                db.collection("students").document(id).set(updates, SetOptions.merge()).await()
+                                updated++
+                            }
+                        } catch (_: Exception) { }
+                    }
+                } catch (_: Exception) { }
+
+                callback("Backfill realizado: $updated documentos actualizados")
+            } catch (e: Exception) {
+                callback("Backfill fallido: ${e.message}")
             }
         }
     }
