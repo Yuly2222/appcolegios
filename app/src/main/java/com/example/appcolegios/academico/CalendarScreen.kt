@@ -104,7 +104,7 @@ fun CalendarScreen(eventId: String? = null) {
 
     // Profile VM: para padres (lista de hijos)
     val profileVm: ProfileViewModel = viewModel()
-    val children by profileVm.children.collectAsState()
+    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
     var selectedChildIndex by remember { mutableStateOf(0) }
 
     // Listener registration manejado con DisposableEffect: soporta múltiples listeners según rol

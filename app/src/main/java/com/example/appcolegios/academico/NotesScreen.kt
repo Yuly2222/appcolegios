@@ -41,7 +41,7 @@ data class ChildStudent(
 fun NotesScreen() {
     // Usar ProfileViewModel para obtener hijos reales y determinar si es PADRE
     val profileVm: ProfileViewModel = viewModel()
-    val children by profileVm.children.collectAsState()
+    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
     val context = LocalContext.current
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))

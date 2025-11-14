@@ -104,6 +104,9 @@ dependencies {
     // Apache POI para leer archivos Excel (.xlsx)
     implementation("org.apache.poi:poi-ooxml:5.2.3")
 
+    // Imagenes (Glide para vistas XML)
+    implementation("com.github.bumptech.glide:glide:4.16.0")
+
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.ui.test.junit4)

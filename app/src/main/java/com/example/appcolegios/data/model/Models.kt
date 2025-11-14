@@ -6,16 +6,17 @@ import com.google.firebase.firestore.DocumentId
 import java.util.Date
 
 data class Student(
-    val id: String = "",
-    val nombre: String = "",
-    val curso: String = "",
-    val grupo: String = "",
-    val numeroLista: Int = 0,
-    val correoInstitucional: String = "",
-    val eps: String = "",
-    val estadoMatricula: String = "",
-    val promedio: Double = 0.0,
-    val avatarUrl: String? = null
+    @DocumentId var id: String = "",
+    var nombre: String = "",
+    var curso: String = "",
+    var grupo: String = "",
+    var numeroLista: Int = 0,
+    var correoInstitucional: String = "",
+    var eps: String = "",
+    var estadoMatricula: String = "",
+    var promedio: Double = 0.0,
+    var avatarUrl: String? = null,
+    var photoUrl: String? = null // Campo unificado para la URL de la foto
 )
 
 data class Guardian(
