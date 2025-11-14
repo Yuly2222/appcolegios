@@ -1,5 +1,9 @@
 package com.example.appcolegios.data.model
 
+data class Schedule(
+    val classes: List<ClassSession> = emptyList()
+)
+
 data class ClassSession(
     var dayOfWeek: Int = 1, // 1 for Monday, 7 for Sunday; default 1
     var subject: String = "",

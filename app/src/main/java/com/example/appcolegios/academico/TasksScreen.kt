@@ -146,7 +146,7 @@ fun TasksScreen() {
 
     // Perfil VM para padres
     val profileVm: ProfileViewModel = viewModel()
-    val children by profileVm.children.collectAsState()
+    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
     val isParent = (currentUserData.role ?: "").equals("PARENT", ignoreCase = true) || (currentUserData.role ?: "").equals("PADRE", ignoreCase = true)
     var showSelectChildDialog by remember { mutableStateOf(false) }
     var selectedChildIndex by remember { mutableStateOf(0) }

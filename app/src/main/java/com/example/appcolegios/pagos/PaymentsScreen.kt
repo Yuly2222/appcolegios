@@ -50,8 +50,8 @@ fun PaymentsScreen() {
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val profileVm: ProfileViewModel = viewModel()
-    val children by profileVm.children.collectAsState()
-    val selectedIndexState by profileVm.selectedChildIndex.collectAsState()
+    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
+    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState()
     val selectedChildIndex = selectedIndexState ?: 0
     val isParent = (userData.role ?: "").equals("PARENT", ignoreCase = true) || (userData.role ?: "").equals("PADRE", ignoreCase = true)
 
