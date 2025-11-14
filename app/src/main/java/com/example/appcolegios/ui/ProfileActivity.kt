@@ -9,6 +9,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
@@ -36,17 +37,29 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var averageText: TextView
     private lateinit var academicInfoButton: Button
 
-    private val pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
-        uri?.let {
-            profileVm.uploadProfileImage(it)
-        }
-    }
+    private lateinit var pickImageLauncher: ActivityResultLauncher<String>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_profile)
 
         profileVm = ViewModelProvider(this).get(ProfileViewModel::class.java)
+
+        // Registrar el launcher aquí, una vez que profileVm está inicializado
+        pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+            uri?.let {
+                profileVm.uploadStudentPhotoAsBase64WithResolver(contentResolver, it) { dataUri, error ->
+                    runOnUiThread {
+                        if (!dataUri.isNullOrBlank()) {
+                            Toast.makeText(this, "Imagen de perfil actualizada", Toast.LENGTH_SHORT).show()
+                            profileVm.refreshAllData()
+                        } else {
+                            Toast.makeText(this, error ?: "Error al subir imagen", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        }
 
         initViews()
         setupObservers()
