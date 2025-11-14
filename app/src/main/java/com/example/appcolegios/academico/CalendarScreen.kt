@@ -900,21 +900,31 @@ private fun EventCard(event: CalendarEvent, onEdit: ((CalendarEvent) -> Unit)? =
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = when (event.type) {
-                    EventType.CLASE -> Icons.Filled.School
-                    EventType.EXAMEN -> Icons.Filled.Warning
-                    EventType.TAREA -> Icons.AutoMirrored.Filled.Assignment
-                    EventType.EVENTO -> Icons.AutoMirrored.Filled.EventNote
-                },
-                contentDescription = null,
-                tint = when (event.type) {
-                    EventType.CLASE -> Color(0xFF2196F3)
-                    EventType.EXAMEN -> Color(0xFFF44336)
-                    EventType.TAREA -> Color(0xFFFFC107)
-                    EventType.EVENTO -> Color(0xFF4CAF50)
-                }
-            )
+            // Reemplazado: icono envuelto en un fondo/círculo para crear la "margen en forma de círculo"
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = when (event.type) {
+                        EventType.CLASE -> Icons.Filled.School
+                        EventType.EXAMEN -> Icons.Filled.Warning
+                        EventType.TAREA -> Icons.AutoMirrored.Filled.Assignment
+                        EventType.EVENTO -> Icons.AutoMirrored.Filled.EventNote
+                    },
+                    contentDescription = null,
+                    tint = when (event.type) {
+                        EventType.CLASE -> Color(0xFF2196F3)
+                        EventType.EXAMEN -> Color(0xFFF44336)
+                        EventType.TAREA -> Color(0xFFFFC107)
+                        EventType.EVENTO -> Color(0xFF4CAF50)
+                    },
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(event.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

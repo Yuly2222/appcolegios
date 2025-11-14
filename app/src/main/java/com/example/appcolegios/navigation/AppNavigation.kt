@@ -251,20 +251,30 @@ fun AppNavigation(
                 })
             }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
-            composable(
-                route = com.example.appcolegios.navigation.AppRoutes.AdminScheduleManage.route,
-                arguments = listOf(navArgument("userId") { type = NavType.StringType; defaultValue = "" })
-            ) { backStackEntry ->
-                val uid = backStackEntry.arguments?.getString("userId")
-                com.example.appcolegios.admin.AdminScheduleManageScreen(userIdArg = uid, onDone = { navController.popBackStack() })
-            }
-            composable(
-                route = AppRoutes.CalendarEvent.route,
-                arguments = listOf(navArgument("eventId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val eid = backStackEntry.arguments?.getString("eventId") ?: ""
-                CalendarScreen(eventId = eid)
-            }
+            // Ruta para Configuración (Settings)
+            composable(AppRoutes.Settings.route) {
+                // Importante: la pantalla es visual y usa callbacks vacíos para que la navegación no dependa de backend
+                com.example.appcolegios.settings.SettingsScreen(userPrefs = userPrefs,
+                     onLanguageSelected = { /* manejar cambio de idioma (callback) */ },
+                     onToggleDarkMode = { /* manejar modo oscuro */ },
+                     onFontSizeChanged = { /* cambiar tamaño de fuente */ },
+                     onTogglePushNotifications = { /* alternar notificaciones push */ },
+                     onToggleAlertType = { _, _ -> /* alternar tipo de alerta */ },
+                     onToggleSounds = { /* alternar sonidos */ },
+                     onToggleVibration = { /* alternar vibración */ },
+                     onChangePassword = { /* navegar a cambiar contraseña */ },
+                     onToggle2FA = { /* alternar 2FA */ },
+                     onSignOutOtherDevices = { /* cerrar sesiones remotas */ },
+                     onRequestPermission = { /* solicitar permiso correspondiente */ },
+                     onViewPolicy = { /* abrir política */ },
+                     onChangeRecoveryEmail = { /* cambiar correo de recuperación */ },
+                     onViewRoles = { /* ver roles asociados */ },
+                     onOpenHelpCenter = { /* abrir ayuda */ },
+                     onReportIssue = { /* reportar problema */ },
+                     onSendSuggestion = { /* enviar sugerencia */ },
+                     onContactSchool = { /* contacto colegio */ }
+                 )
+             }
         }
     }
 
@@ -284,6 +294,21 @@ fun AppNavigation(
                         style = MaterialTheme.typography.titleLarge
                     )
                     HorizontalDivider()
+
+                    // Settings (Configuración) - entrada común
+                    NavigationDrawerItem(
+                        icon = { Icon(Icons.Filled.MoreVert, contentDescription = null) },
+                        label = { Text("Configuración") },
+                        selected = currentDestination?.route == AppRoutes.Settings.route,
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            navController.navigate(AppRoutes.Settings.route) {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
 
                     // Opción Home / Admin
                     if (isAdmin) {

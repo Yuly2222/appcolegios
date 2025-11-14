@@ -38,4 +38,7 @@ sealed class AppRoutes(val route: String) {
 
     // Calendar deep link to open specific event
     object CalendarEvent : AppRoutes("calendar/{eventId}")
+
+    // Settings route (Configuración)
+    object Settings : AppRoutes("settings")
 }

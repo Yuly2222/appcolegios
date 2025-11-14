@@ -13,6 +13,8 @@ import com.example.appcolegios.ui.theme.AppColegiosTheme
 import com.example.appcolegios.data.UserPreferencesRepository
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,8 +45,15 @@ class MainActivity : ComponentActivity() {
         }
         // Asegurar valor no nulo
         val resolvedStart = startDestination ?: AppRoutes.Splash.route
+
         setContent {
-            AppColegiosTheme {
+            // Crear repo aquí para usar en Compose
+            val userPrefs = UserPreferencesRepository(applicationContext)
+            // Observar preferencias (modo oscuro y tamaño de fuente) para aplicar tema en tiempo real
+            val darkModeEnabled by userPrefs.darkModeEnabled.collectAsState(initial = false)
+            val fontSizeEnum by userPrefs.fontSizeEnum.collectAsState(initial = 1)
+
+            AppColegiosTheme(darkTheme = darkModeEnabled, fontSizeEnum = fontSizeEnum) {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
