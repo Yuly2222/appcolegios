@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- 1. Información de salud -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Información de salud"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Condiciones médicas relevantes"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_health_conditions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="Describa condiciones médicas relevantes" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Alergias (medicamentos, alimentos, sustancias)"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_allergies"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="Liste alergias y reacciones" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Medicamentos actuales y dosis"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_medications"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="Nombre del medicamento y dosis" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Restricciones médicas"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_med_restrictions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="Restricciones (ej. no actividad física intensa)" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Indicaciones en caso de emergencia"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_emergency_instructions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="Qué hacer en caso de emergencia" />
+
+        <!-- 2. Seguridad y autorizaciones -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2. Seguridad y autorizaciones"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Personas autorizadas para recoger al estudiante"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_authorized_people"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="Nombres y relación" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Personas no autorizadas"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_not_authorized_people"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="1"
+            android:gravity="top"
+            android:hint="Nombres si aplica" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Autorizaciones especiales"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp" />
+        <EditText
+            android:id="@+id/et_special_authorizations"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:gravity="top"
+            android:hint="p.ej. salida solo, con hermanos, transporte escolar, salidas pedagógicas" />
+
+        <!-- 3. Contactos de emergencia -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="3. Contactos de emergencia"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Contacto 1 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contacto 1 - Nombre" />
+        <EditText
+            android:id="@+id/contact1_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPersonName"
+            android:hint="Nombre" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contacto 1 - Parentesco" />
+        <EditText
+            android:id="@+id/contact1_relation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:hint="Parentesco" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contacto 1 - Teléfono" />
+        <EditText
+            android:id="@+id/contact1_phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="phone"
+            android:hint="Teléfono" />
+
+        <!-- Contacto 2 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contacto 2 - Nombre"
+            android:layout_marginTop="8dp" />
+        <EditText
+            android:id="@+id/contact2_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textPersonName"
+            android:hint="Nombre" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contacto 2 - Parentesco" />
+        <EditText
+            android:id="@+id/contact2_relation"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:hint="Parentesco" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Contacto 2 - Teléfono" />
+        <EditText
+            android:id="@+id/contact2_phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="phone"
+            android:hint="Teléfono" />
+
+        <!-- 4. Necesidades educativas o emocionales -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="4. Necesidades educativas o emocionales"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Dificultades de aprendizaje (opcional)" />
+        <EditText
+            android:id="@+id/et_learning_difficulties"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="1"
+            android:hint="Si aplica" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Recomendaciones para el manejo escolar"
+            android:layout_marginTop="8dp" />
+        <EditText
+            android:id="@+id/et_recommendations"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:hint="Recomendaciones para docentes" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Apoyo emocional requerido"
+            android:layout_marginTop="8dp" />
+        <EditText
+            android:id="@+id/et_emotional_support"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:hint="Sugerencias para apoyo emocional" />
+
+        <!-- 6. Hábitos y recomendaciones generales -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="6. Hábitos y recomendaciones generales"
+            android:textStyle="bold"
+            android:textSize="16sp"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Preferencias alimenticias o restricciones" />
+        <EditText
+            android:id="@+id/et_food_preferences"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="1"
+            android:hint="Preferencias o restricciones alimenticias" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Rutinas útiles para el manejo escolar"
+            android:layout_marginTop="8dp" />
+        <EditText
+            android:id="@+id/et_routines"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="1"
+            android:hint="Rutinas y hábitos" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Observaciones adicionales"
+            android:layout_marginTop="8dp" />
+        <EditText
+            android:id="@+id/et_additional_observations"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="2"
+            android:hint="Comentarios adicionales" />
+
+    </LinearLayout>
+</ScrollView>

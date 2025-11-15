@@ -186,7 +186,27 @@
     <string name="promedio_label">Promedio:</string>
     <string name="sample_average">4.5</string>
 
-    <!-- Nuevos strings para recuperación de contraseña -->
+    <!-- Nuevas cadenas para vista PADRE -->
+    <string name="parent_selected_child">Hijo seleccionado</string>
+    <string name="no_children">(sin hijos)</string>
+    <string name="select">Seleccionar</string>
+    <string name="parent_email_label">Correo (no editable)</string>
+    <string name="hint_parent_phone">Ingresa tu teléfono</string>
+    <string name="save">Guardar</string>
+    <string name="add_information">Agregar información</string>
+
+    <!-- Strings añadidos para ProfileActivity -->
+    <string name="select_child_title">Seleccionar hijo</string>
+    <string name="must_be_logged_in">Debes iniciar sesión</string>
+    <string name="phone_saved">Teléfono guardado</string>
+    <string name="no_child_selected">No hay hijo seleccionado</string>
+    <string name="add_info_title">Agregar información del hijo</string>
+    <string name="info_saved">Información guardada</string>
+    <string name="error_guardando">Error guardando: %1$s</string>
+    <string name="profile_image_updated">Imagen de perfil actualizada</string>
+    <string name="error_subiendo_imagen">Error al subir imagen</string>
+
+    <!-- Nuevas cadenas para recuperación de contraseña -->
     <string name="reset_password_title">Recuperar contraseña</string>
     <string name="reset_password_hint">Correo electrónico</string>
     <string name="reset_password_button">Enviar correo</string>

@@ -37,6 +37,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlinx.coroutines.tasks.await
 
 @Composable
 fun ProfileScreen(navController: NavController? = null) {
@@ -115,6 +122,34 @@ fun ProfileScreen(navController: NavController? = null) {
                 }) {
                     Text("Backfill fotos")
                 }
+            } else if (roleToShow?.equals("PADRE", ignoreCase = true) == true) {
+                // Perfil para PADRE: mostrar foto/nombre del hijo seleccionado y botón para agregar info
+                val children by profileViewModel.children.collectAsState()
+                val selectedIndexState by profileViewModel.selectedChildIndex.collectAsState()
+                val selectedIndex = selectedIndexState ?: 0
+                val selectedChild = children.getOrNull(selectedIndex)
+
+                ParentProfileCard(
+                    child = selectedChild,
+                    children = children,
+                    selectedIndex = selectedIndex,
+                    onSelectChild = { idx -> profileViewModel.selectChildAtIndex(idx) },
+                    onSaveParentInfo = { childId, infoMap ->
+                        val db = FirebaseFirestore.getInstance()
+                        db.collection("students").document(childId)
+                            .set(mapOf("parentInfo" to infoMap), SetOptions.merge())
+                            .addOnSuccessListener {
+                                Toast.makeText(context, "Información guardada", Toast.LENGTH_SHORT).show()
+                                // refrescar datos del viewmodel
+                                profileViewModel.refreshAllData()
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(context, "Error guardando: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                            }
+                    }
+                )
+
+                Spacer(Modifier.height(12.dp))
             } else {
                 if (isDocente) {
                     // Mostrar formulario editable para docentes
@@ -244,7 +279,16 @@ private fun TeacherCard(
                         Text(text = "Foto", textAlign = TextAlign.Center)
                     } else if (photoUrl.startsWith("data:image")) {
                         val decodedBytesState = produceState<ByteArray?>(initialValue = null, photoUrl) {
-                            value = try { decodeDataUriToBytes(photoUrl) } catch (_: Exception) { null }
+                            val base64Part = photoUrl.substringAfter(",", "").replace("\\s".toRegex(), "").trim()
+                            if (base64Part.isBlank()) { value = null; return@produceState }
+                            value = try {
+                                withContext(Dispatchers.IO) {
+                                    try { AndroidBase64.decode(base64Part, AndroidBase64.NO_WRAP) }
+                                    catch (_: IllegalArgumentException) {
+                                        try { AndroidBase64.decode(base64Part, AndroidBase64.DEFAULT) } catch (_: Exception) { null }
+                                    }
+                                }
+                            } catch (_: Exception) { null }
                         }
                          if (decodedBytesState.value != null) {
                             val req = ImageRequest.Builder(context).data(decodedBytesState.value).build()
@@ -375,7 +419,16 @@ private fun StudentCard(student: com.example.appcolegios.data.model.Student) {
                     Text(text = "Foto", textAlign = TextAlign.Center)
                 } else if (photoUrl.startsWith("data:image")) {
                     val decodedBytesState = produceState<ByteArray?>(initialValue = null, photoUrl) {
-                        value = try { decodeDataUriToBytes(photoUrl) } catch (_: Exception) { null }
+                        val base64Part = photoUrl.substringAfter(",", "").replace("\\s".toRegex(), "").trim()
+                        if (base64Part.isBlank()) { value = null; return@produceState }
+                        value = try {
+                            withContext(Dispatchers.IO) {
+                                try { AndroidBase64.decode(base64Part, AndroidBase64.NO_WRAP) }
+                                catch (_: IllegalArgumentException) {
+                                    try { AndroidBase64.decode(base64Part, AndroidBase64.DEFAULT) } catch (_: Exception) { null }
+                                }
+                            }
+                        } catch (_: Exception) { null }
                     }
                      if (decodedBytesState.value != null) {
                         val req = ImageRequest.Builder(context).data(decodedBytesState.value).build()
@@ -438,25 +491,175 @@ private fun ProfileInfoRow(label: String, value: String) {
     }
 }
 
-// Helper: decodifica data URI (data:image/...) a ByteArray en dispatcher IO
-suspend fun decodeDataUriToBytes(dataUri: String?): ByteArray? {
-    if (dataUri.isNullOrBlank()) return null
-    val base64Part = dataUri.substringAfter(",", "").replace("\\s".toRegex(), "").trim()
-    if (base64Part.isBlank()) return null
-    return try {
-        withContext(Dispatchers.IO) {
+@Composable
+private fun ParentProfileCard(
+    child: com.example.appcolegios.data.model.Student?,
+    children: List<com.example.appcolegios.data.model.Student>,
+    selectedIndex: Int,
+    onSelectChild: (Int) -> Unit,
+    onSaveParentInfo: (childId: String, info: Map<String, String>) -> Unit
+) {
+    var showSelectDialog by remember { mutableStateOf(false) }
+    var showAddInfoDialog by remember { mutableStateOf(false) }
+
+    // Obtener datos del usuario (padre) desde DataStore y Firestore para mostrar nombre/avatar del padre
+    val context = LocalContext.current
+    val userPrefsRepo = UserPreferencesRepository(context)
+    val currentUserData by userPrefsRepo.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
+    var parentAvatar by remember { mutableStateOf<String?>(null) }
+    var parentDisplayName by remember { mutableStateOf(currentUserData.name ?: (child?.nombre ?: "Sin estudiante seleccionado")) }
+
+    LaunchedEffect(currentUserData.userId) {
+        // actualizar nombre desde prefs
+        parentDisplayName = currentUserData.name ?: (child?.nombre ?: "Sin estudiante seleccionado")
+        val uid = currentUserData.userId
+        if (!uid.isNullOrBlank()) {
             try {
-                // Intentar sin saltos de línea primero
-                AndroidBase64.decode(base64Part, AndroidBase64.NO_WRAP)
-            } catch (_: IllegalArgumentException) {
-                try {
-                    AndroidBase64.decode(base64Part, AndroidBase64.DEFAULT)
-                } catch (_: Exception) {
-                    null
+                val doc = FirebaseFirestore.getInstance().collection("users").document(uid).get().await()
+                if (doc.exists()) {
+                    // Preferir campos legibles (photoUrl / avatarUrl), luego los Base64
+                    val photoUrl = doc.getString("photoUrl") ?: doc.getString("avatarUrl")
+                    if (!photoUrl.isNullOrBlank()) {
+                        parentAvatar = photoUrl
+                    } else {
+                        val pb = doc.getString("photoBase64")
+                        val ab = doc.getString("avatarBase64")
+                        parentAvatar = when {
+                            !pb.isNullOrBlank() -> "data:image/jpeg;base64,$pb"
+                            !ab.isNullOrBlank() -> if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab"
+                            else -> null
+                        }
+                    }
+                    // Si no hay nombre en prefs, intentar leer displayName del doc
+                    if (parentDisplayName.isBlank()) {
+                        val nameFromDoc = doc.getString("name") ?: doc.getString("displayName")
+                        if (!nameFromDoc.isNullOrBlank()) parentDisplayName = nameFromDoc
+                    }
+                }
+            } catch (_: Exception) {
+                // no bloquear UI en caso de error
+            }
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            // Avatar del padre (fallback a avatar del hijo si no existe)
+            val displayedAvatar = parentAvatar ?: child?.avatarUrl
+            Box(modifier = Modifier
+                .size(100.dp)
+                .clip(CircleShape)
+                .background(Color.LightGray), contentAlignment = Alignment.Center) {
+                if (displayedAvatar.isNullOrBlank()) {
+                    Text(text = "Foto", textAlign = TextAlign.Center)
+                } else if (displayedAvatar.startsWith("data:image")) {
+                    val decodedBytesState = produceState<ByteArray?>(initialValue = null, displayedAvatar) {
+                        val base64Part = displayedAvatar.substringAfter(",", "").replace("\\s".toRegex(), "").trim()
+                        if (base64Part.isBlank()) { value = null; return@produceState }
+                        value = try {
+                            withContext(Dispatchers.IO) {
+                                try { AndroidBase64.decode(base64Part, AndroidBase64.NO_WRAP) }
+                                catch (_: IllegalArgumentException) {
+                                    try { AndroidBase64.decode(base64Part, AndroidBase64.DEFAULT) } catch (_: Exception) { null }
+                                }
+                            }
+                        } catch (_: Exception) { null }
+                    }
+                    if (decodedBytesState.value != null) {
+                        val req = ImageRequest.Builder(context).data(decodedBytesState.value).build()
+                        AsyncImage(model = req, contentDescription = "Avatar", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    } else {
+                        Text(text = "Foto", textAlign = TextAlign.Center)
+                    }
+                } else {
+                    AsyncImage(model = displayedAvatar, contentDescription = "Avatar", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(text = parentDisplayName.ifBlank { "Sin estudiante seleccionado" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Text(text = if (child != null) "Curso: ${child.curso}" else "", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { showSelectDialog = true }, modifier = Modifier.weight(1f)) { Text("Seleccionar hijo") }
+                // Si no hay hijo seleccionado, abrir el selector para elegir uno; si hay, abrir el formulario
+                Button(onClick = { if (child != null) showAddInfoDialog = true else showSelectDialog = true }, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Add, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Agregar información")
                 }
             }
         }
-    } catch (_: Exception) {
-        null
+    }
+
+    // Selección de hijo
+    if (showSelectDialog) {
+        var sel by remember { mutableStateOf(selectedIndex) }
+        AlertDialog(onDismissRequest = { showSelectDialog = false }, title = { Text("Selecciona estudiante") }, text = {
+            Column {
+                if (children.isEmpty()) Text("No hay hijos asociados") else children.forEachIndexed { idx, c ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                        .clickable { sel = idx }) {
+                        RadioButton(selected = sel == idx, onClick = { sel = idx })
+                        Spacer(Modifier.width(8.dp))
+                        Column { Text(c.nombre, fontWeight = FontWeight.SemiBold); Text("Curso: ${c.curso}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(onClick = { if (children.isNotEmpty()) onSelectChild(sel); showSelectDialog = false }) { Text("Aceptar") } }, dismissButton = { TextButton(onClick = { showSelectDialog = false }) { Text("Cancelar") } })
+    }
+
+    // Dialogo para agregar info
+    if (showAddInfoDialog) {
+        var allergies by remember { mutableStateOf("") }
+        var medications by remember { mutableStateOf("") }
+        var contactName by remember { mutableStateOf("") }
+        var contactPhone by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { showAddInfoDialog = false },
+            title = { Text("Agregar información del hijo") },
+            text = {
+                Column {
+                    OutlinedTextField(value = allergies, onValueChange = { allergies = it }, label = { Text("Alergias") })
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = medications, onValueChange = { medications = it }, label = { Text("Medicaciones") })
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = contactName, onValueChange = { contactName = it }, label = { Text("Contacto - Nombre") })
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = contactPhone, onValueChange = { contactPhone = it }, label = { Text("Contacto - Teléfono") })
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val childId = child?.id
+                    if (childId.isNullOrBlank()) {
+                        // nothing selected: simplemente cerrar el diálogo
+                        showAddInfoDialog = false
+                    } else {
+                        val info = mapOf(
+                            "allergies" to allergies.trim(),
+                            "medications" to medications.trim(),
+                            "contactName" to contactName.trim(),
+                            "contactPhone" to contactPhone.trim()
+                        )
+                        onSaveParentInfo(childId, info)
+                        showAddInfoDialog = false
+                    }
+                }) {
+                    Text("Guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddInfoDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }
