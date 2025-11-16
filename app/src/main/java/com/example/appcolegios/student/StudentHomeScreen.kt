@@ -19,6 +19,8 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.compose.runtime.collectAsState
 import com.example.appcolegios.data.UserData
 import kotlinx.coroutines.tasks.await
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
 
 // Estado simplificado para el dashboard de estudiante
 data class StudentDashboardState(
@@ -49,56 +51,103 @@ data class ActivityInfo(
     val dueDate: String
 )
 
+// Acción rápida dinámica cargada desde Firebase
+data class HomeAction(
+    val label: String,
+    val route: String,
+    val iconKey: String? = null // opcional, para mapear a un icono local
+)
+
 @Composable
 fun StudentHomeScreen(navController: NavController, displayName: String? = null) {
     var state by remember { mutableStateOf(StudentDashboardState()) }
+    var loadedActions by remember { mutableStateOf<List<HomeAction>>(emptyList()) }
 
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
     val storedUser by userPrefs.userData.collectAsState(initial = UserData(null, null, null))
 
     LaunchedEffect(displayName, storedUser) {
-        val nameToUse = displayName?.takeIf { it.isNotBlank() } ?: storedUser.name ?: "Estudiante"
-        // Cargar cursos reales desde Firestore si existe userId
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        // Resolver nombre preferente: 1) displayName param, 2) users/{uid}.name o displayName, 3) FirebaseAuth.currentUser.displayName, 4) userPrefs.name, 5) fallback
+        var nameToUse: String? = displayName?.takeIf { it.isNotBlank() }
+        val db = FirebaseFirestore.getInstance()
         val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-        val coursesList = mutableListOf<CourseInfo>()
-        val classesToday = mutableListOf<ClassInfo>()
-        val activities = mutableListOf<ActivityInfo>()
         try {
             val uid = auth.currentUser?.uid
-            if (!uid.isNullOrBlank()) {
-                val studentDoc = db.collection("students").document(uid).get().await()
-                val curso = studentDoc.getString("curso") ?: ""
-                val courseIds = studentDoc.get("courses") as? List<*>
-                if (!courseIds.isNullOrEmpty()) {
-                    for (cid in courseIds) {
-                        val cdoc = db.collection("courses").document(cid.toString()).get().await()
-                        if (cdoc.exists()) {
-                            val name = cdoc.getString("name") ?: "Curso"
-                            val subject = cdoc.getString("subject") ?: cdoc.getString("materia") ?: ""
-                            val studentsSnap = db.collection("courses").document(cdoc.id).collection("students").get().await()
-                            val count = studentsSnap.size()
-                            coursesList.add(CourseInfo(name, count, subject))
-                        }
+            if (nameToUse.isNullOrBlank() && !uid.isNullOrBlank()) {
+                try {
+                    val userDoc = db.collection("users").document(uid).get().await()
+                    if (userDoc.exists()) {
+                        nameToUse = userDoc.getString("name") ?: userDoc.getString("displayName")
                     }
-                } else if (curso.isNotBlank()) {
-                    // Fallback: usar curso en el perfil
-                    coursesList.add(CourseInfo(curso, 0, ""))
-                }
-                // TODO: cargar clases y actividades reales si el esquema existe
+                } catch (_: Exception) { /* ignore Firestore name fetch errors */ }
             }
-        } catch (_: Exception) {
-            // ignorar
-        }
+            if (nameToUse.isNullOrBlank()) nameToUse = auth.currentUser?.displayName
+        } catch (_: Exception) { /* ignore */ }
+        if (nameToUse.isNullOrBlank()) nameToUse = storedUser.name ?: "Estudiante"
+         // Cargar cursos reales desde Firestore si existe userId
+         // db/auth variables ya inicializadas arriba si es necesario
+         val coursesList = mutableListOf<CourseInfo>()
+         val classesToday = mutableListOf<ClassInfo>()
+         val activities = mutableListOf<ActivityInfo>()
+         try {
+            val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+             if (!uid.isNullOrBlank()) {
+                 val studentDoc = db.collection("students").document(uid).get().await()
+                 val curso = studentDoc.getString("curso") ?: ""
+                 val courseIds = studentDoc.get("courses") as? List<*>
+                 if (!courseIds.isNullOrEmpty()) {
+                     for (cid in courseIds) {
+                         val cdoc = db.collection("courses").document(cid.toString()).get().await()
+                         if (cdoc.exists()) {
+                             val name = cdoc.getString("name") ?: "Curso"
+                             val subject = cdoc.getString("subject") ?: cdoc.getString("materia") ?: ""
+                             val studentsSnap = db.collection("courses").document(cdoc.id).collection("students").get().await()
+                             val count = studentsSnap.size()
+                             coursesList.add(CourseInfo(name, count, subject))
+                         }
+                     }
+                 } else if (curso.isNotBlank()) {
+                     // Preferir usar info real del perfil si existe
+                     coursesList.add(CourseInfo(curso, 0, ""))
+                 }
+                 // TODO: cargar clases y actividades reales si el esquema existe
+             }
+         } catch (_: Exception) {
+             // ignorar errores de carga
+         }
+
+         // Cargar acciones rápidas desde Firestore: colección 'home_actions', campo 'role' == 'student'
+         val actions = mutableListOf<HomeAction>()
+         try {
+             val actionsSnap = db.collection("home_actions").whereEqualTo("role", "student").get().await()
+             if (actionsSnap != null && !actionsSnap.isEmpty) {
+                 for (doc in actionsSnap.documents) {
+                     val label = doc.getString("label") ?: continue
+                     val route = doc.getString("route") ?: continue
+                     val iconKey = doc.getString("iconKey")
+                     actions.add(HomeAction(label = label, route = route, iconKey = iconKey))
+                 }
+             }
+         } catch (_: Exception) { /* ignore and keep empty */ }
 
         state = StudentDashboardState(
-            studentName = nameToUse,
-            enrolledCourses = coursesList.ifEmpty { listOf(CourseInfo("Matemáticas 101", 30, "Matemáticas")) },
-            todayClasses = classesToday.ifEmpty { listOf(ClassInfo("Matemáticas", "A1", "08:00", "Sala 1")) },
-            recentActivities = activities.ifEmpty { listOf(ActivityInfo("Tarea 1", "Tarea", "Matemáticas", "2025-11-01")) },
+            studentName = nameToUse ?: "Estudiante",
+            enrolledCourses = coursesList,
+            todayClasses = classesToday,
+            recentActivities = activities,
             loading = false
         )
+        // publicar acciones en el View (usar estado local simple si se desea)
+        // Si no hubo acciones en Firestore, restaurar acciones por defecto para estudiantes
+        val roleLower = storedUser.role?.lowercase()
+        loadedActions = if (actions.isNotEmpty()) actions else if (roleLower == "estudiante" || roleLower == "student") {
+            listOf(
+                HomeAction("Asistencia", "attendance", "attendance"),
+                HomeAction("Mensajes", "messages", "messages"),
+                HomeAction("Tareas", "tasks", "tasks")
+            )
+        } else emptyList()
     }
 
     if (state.loading) {
@@ -119,7 +168,9 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
         }
 
         item {
-            StudentQuickActionsCard(navController = navController)
+            // Enviar acciones dinámicas. Si no hay acciones cargadas, mostrar mensaje en lugar de usar fallback
+            val actionsToShow = loadedActions
+            StudentQuickActionsCard(navController = navController, actions = actionsToShow)
         }
 
         item {
@@ -197,7 +248,7 @@ private fun StudentInfoCard(studentName: String, coursesCount: Int) {
 }
 
 @Composable
-private fun StudentQuickActionsCard(navController: NavController) {
+private fun StudentQuickActionsCard(navController: NavController, actions: List<HomeAction>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -206,17 +257,21 @@ private fun StudentQuickActionsCard(navController: NavController) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             Text("Acciones Rápidas", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                QuickActionButton(icon = Icons.Filled.CheckCircle, label = "Asistencia") {
-                    // navegar a asistencia
-                    navController.navigate("attendance")
-                }
-                // NO incluir la opción "Calificar" para estudiantes
-                QuickActionButton(icon = Icons.AutoMirrored.Filled.Message, label = "Mensajes") {
-                    navController.navigate("messages")
-                }
-                QuickActionButton(icon = Icons.AutoMirrored.Filled.Assignment, label = "Tareas") {
-                    navController.navigate("tasks")
+            if (actions.isEmpty()) {
+                Text("No hay acciones rápidas disponibles.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    actions.forEach { act ->
+                        val icon = when (act.iconKey ?: act.label.lowercase()) {
+                            "attendance", "asistencia" -> Icons.Filled.CheckCircle
+                            "messages", "mensajes" -> Icons.AutoMirrored.Filled.Message
+                            "tasks", "tareas" -> Icons.AutoMirrored.Filled.Assignment
+                            else -> Icons.Filled.Info
+                        }
+                        QuickActionButton(icon = icon, label = act.label) {
+                            if (act.route.isNotBlank()) navController.navigate(act.route)
+                        }
+                    }
                 }
             }
         }

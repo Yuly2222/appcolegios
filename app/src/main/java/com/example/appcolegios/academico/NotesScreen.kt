@@ -6,7 +6,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,21 +19,17 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.perfil.ProfileViewModel
-import com.example.appcolegios.data.model.Student
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.tasks.await
 
+// Reutilizamos el tipo local para representación de notas en esta pantalla
 data class Grade(
     val subject: String,
     val period: String,
     val grade: Double,
     val observations: String,
     val teacher: String
-)
-
-// Datos básicos por hijo para este screen
-data class ChildStudent(
-    val studentName: String,
-    val studentCourse: String,
-    val grades: List<Grade>
 )
 
 @Composable
@@ -50,25 +45,48 @@ fun NotesScreen() {
     var selectedChildIndex by remember { mutableStateOf(0) }
     var showSelectChildDialog by remember { mutableStateOf(false) }
 
-    // Si es estudiante y no hay hijos listados, no seleccionar
-    LaunchedEffect(children, userData) {
+    // Estado de notas cargadas desde Firestore
+    var grades by remember { mutableStateOf<List<Grade>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+
+    val auth = FirebaseAuth.getInstance()
+    val db = FirebaseFirestore.getInstance()
+
+    // seleccionar primer hijo automáticamente si existe
+    LaunchedEffect(children) {
         if (children.isNotEmpty()) selectedChildIndex = 0
     }
 
-    // Mapear datos: usamos datos reales de children si existen; si no, mostramos demo
-    val demoGrades = listOf(
-        Grade("Matemáticas", "Periodo 1", 4.5, "Excelente desempeño en cálculo", "Herman González"),
-        Grade("Español", "Periodo 1", 4.2, "Buena comprensión lectora", "María López"),
-        Grade("Ciencias", "Periodo 1", 4.8, "Sobresaliente en laboratorios", "Carlos Ruiz"),
-        Grade("Inglés", "Periodo 1", 4.0, "Buen nivel conversacional", "Ana Smith")
-    )
-
-    val grades = if (children.isNotEmpty()) {
-        // aquí podrías cargar notas reales desde Firestore por studentId; por ahora mostramos demo por hijo
-        demoGrades
-    } else demoGrades
-
-    val averageGrade = if (grades.isEmpty()) 0.0 else grades.map { it.grade }.average()
+    // Cargar notas reales desde Firestore cuando cambie la selección o el usuario
+    LaunchedEffect(selectedChildIndex, children, userData) {
+        loading = true
+        errorMsg = null
+        grades = emptyList()
+        try {
+            val uid = if (isStudent) auth.currentUser?.uid else children.getOrNull(selectedChildIndex)?.id
+            if (uid.isNullOrBlank()) {
+                // sin id, no cargar
+                loading = false
+                return@LaunchedEffect
+            }
+            val snaps = db.collection("students").document(uid).collection("grades").get().await()
+            val list = mutableListOf<Grade>()
+            for (doc in snaps.documents) {
+                val subject = doc.getString("materia") ?: doc.getString("subject") ?: doc.getString("name") ?: ""
+                val period = doc.getString("periodo") ?: doc.getString("period") ?: ""
+                val gradeVal = doc.getDouble("calificacion") ?: doc.getDouble("grade") ?: 0.0
+                val obs = doc.getString("observations") ?: doc.getString("observaciones") ?: ""
+                val teacher = doc.getString("teacher") ?: doc.getString("profesor") ?: ""
+                list.add(Grade(subject, period, gradeVal, obs, teacher))
+            }
+            grades = list
+        } catch (e: Exception) {
+            errorMsg = "Error cargando notas: ${e.localizedMessage}"
+        } finally {
+            loading = false
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -94,7 +112,7 @@ fun NotesScreen() {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        currentChild?.nombre ?: "--",
+                        currentChild?.nombre ?: auth.currentUser?.displayName ?: "--",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -106,6 +124,7 @@ fun NotesScreen() {
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
+                    val averageGrade = if (grades.isEmpty()) 0.0 else grades.map { it.grade }.average()
                     Text(
                         String.format(Locale.getDefault(), "%.2f", averageGrade),
                         style = MaterialTheme.typography.displayMedium,
@@ -155,11 +174,25 @@ fun NotesScreen() {
 
         Spacer(Modifier.height(12.dp))
 
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(grades) { grade ->
-                GradeCard(grade)
+        if (loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            return
+        }
+
+        if (errorMsg != null) {
+            Text(errorMsg!!, color = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.height(8.dp))
+        }
+
+        if (grades.isEmpty()) {
+            Text("No hay notas para mostrar.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                items(grades) { grade ->
+                    GradeCard(grade)
+                }
             }
         }
     }

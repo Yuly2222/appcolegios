@@ -88,7 +88,7 @@ class CalendarViewModel : ViewModel() {
                     }
                     val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
                     if (d != null) {
-                        val ev = CalendarEvent(eventId, title, description, d, type, EventSource.GLOBAL, doc.getString("courseId"))
+                        val ev = CalendarEvent(eventId, title, description, d, type, EventSource.GLOBAL, /*ownerId*/null, /*creatorId*/doc.getString("ownerId"), /*courseId*/doc.getString("courseId"))
                         addOrUpdateEvent(ev)
                         _selectedDayMillis.value = d.time
                         _bottomSheetVisible.value = true
@@ -111,7 +111,7 @@ class CalendarViewModel : ViewModel() {
                         }
                         val type = try { EventType.valueOf(ud.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
                         if (d != null) {
-                            val ev = CalendarEvent(eventId, title, description, d, type, EventSource.USER, uid)
+                            val ev = CalendarEvent(eventId, title, description, d, type, EventSource.USER, /*ownerId*/uid, /*creatorId*/uid, /*courseId*/null)
                             addOrUpdateEvent(ev)
                             _selectedDayMillis.value = d.time
                             _bottomSheetVisible.value = true

@@ -120,21 +120,6 @@ fun AttendanceScreen() {
                 }
             }
 
-            if (loadedCourses.isEmpty()) {
-                // fallback demo
-                loadedCourses.add(
-                    CourseSimple(
-                        id = "c1",
-                        name = "Matemáticas 101",
-                        students = listOf(
-                            StudentSimple("s1", "Juan Pérez"),
-                            StudentSimple("s2", "María Gómez"),
-                            StudentSimple("s3", "Carlos Ruiz")
-                        )
-                    )
-                )
-            }
-
             courses = loadedCourses
         } catch (e: Exception) {
             errorMsg = "Error cargando cursos: ${e.localizedMessage}"

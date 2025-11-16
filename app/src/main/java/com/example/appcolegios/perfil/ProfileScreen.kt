@@ -257,6 +257,10 @@ private fun TeacherCard(
         // Actualizar el estado local cuando el initial cambie (por ejemplo tras guardado en Firestore)
         photoUrl = initial?.photoUrl ?: ""
     }
+    LaunchedEffect(initial?.nombre) {
+        // Mantener sincronizado el nombre incluso cuando los datos lleguen de forma asíncrona
+        name = initial?.nombre ?: ""
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -308,7 +312,8 @@ private fun TeacherCard(
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre") }, singleLine = true)
+                    // OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre") }, singleLine = true)
+                    OutlinedTextField(value = name, onValueChange = { /* nombre no editable en UI */ }, label = { Text("Nombre") }, singleLine = true, readOnly = true)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Teléfono") }, singleLine = true)
                 }
@@ -323,12 +328,15 @@ private fun TeacherCard(
                 Button(onClick = {
                     // Mostrar progreso de guardado y actualizar DataStore
                     isSaving = true
-                    profileViewModel.saveTeacherProfile(if (name.isBlank()) null else name, if (phone.isBlank()) null else phone, if (photoUrl.isBlank()) null else photoUrl)
+                    // No enviar el nombre al backend desde esta UI (nombre es de solo lectura)
+                    profileViewModel.saveTeacherProfile(null, if (phone.isBlank()) null else phone, if (photoUrl.isBlank()) null else photoUrl)
                     coroutineScope.launch {
                         try {
                             // Solo actualizar DataStore si existe un userId (evita eliminar el userId accidentalmente)
+                            // No actualizar el nombre en DataStore desde el perfil docente (nombre no editable aquí)
                             if (!currentUserData.userId.isNullOrBlank()) {
-                                userPrefsRepo.updateUserData(currentUserData.userId, currentUserData.role, if (name.isBlank()) null else name)
+                                // Mantener role/userId, no enviar 'name' para no sobrescribir
+                                userPrefsRepo.updateUserData(currentUserData.userId, currentUserData.role, currentUserData.name)
                             }
                         } catch (_: Exception) { }
                         isSaving = false
@@ -587,7 +595,7 @@ private fun ParentProfileCard(
             Text(text = child?.curso ?: "", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { showSelectDialog = true }, modifier = Modifier.weight(1f)) { Text("Seleccionar hijo") }
+                Button(onClick = { showSelectDialog = true }, modifier = Modifier.weight(1f)) { Text(if (child?.nombre.isNullOrBlank()) "Seleccionar hijo" else child!!.nombre) }
                 // Si no hay hijo seleccionado, abrir el selector para elegir uno; si hay, abrir el formulario
                 Button(onClick = { if (child != null) showAddInfoDialog = true else showSelectDialog = true }, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Filled.Add, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Agregar información")
