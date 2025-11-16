@@ -199,6 +199,14 @@ fun AppNavigation(
             composable(AppRoutes.Notifications.route) { NotificationsScreen(navController = navController) }
             composable(AppRoutes.Messages.route) { ConversationsScreen(navController = navController) }
             composable(AppRoutes.Calendar.route) { CalendarScreen() }
+            composable(
+                route = AppRoutes.CalendarEvent.route,
+                arguments = listOf(navArgument("eventId") { type = NavType.StringType; defaultValue = "" })
+            ) { backStackEntry ->
+                val raw = backStackEntry.arguments?.getString("eventId")
+                val eventId = if (raw.isNullOrBlank()) null else raw
+                CalendarScreen(eventId = eventId)
+            }
             composable(AppRoutes.Schedule.route) { ScheduleScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController) }
             composable(AppRoutes.AssignGroup.route) { com.example.appcolegios.admin.AssignGroupAdminScreen(navController = navController) }

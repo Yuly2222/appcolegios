@@ -583,7 +583,8 @@ private fun ParentProfileCard(
             Spacer(Modifier.height(12.dp))
             Text(text = parentDisplayName.ifBlank { "Sin estudiante seleccionado" }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
-            Text(text = if (child != null) "Curso: ${child.curso}" else "", style = MaterialTheme.typography.bodyMedium)
+            // Mostrar solo el curso (sin la etiqueta "Curso:") para el rol PADRE
+            Text(text = child?.curso ?: "", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { showSelectDialog = true }, modifier = Modifier.weight(1f)) { Text("Seleccionar hijo") }

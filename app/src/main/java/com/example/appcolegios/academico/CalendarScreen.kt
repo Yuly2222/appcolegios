@@ -1,5 +1,6 @@
 package com.example.appcolegios.academico
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -31,6 +32,8 @@ import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.data.UserData
 import com.example.appcolegios.data.model.Role
 import androidx.compose.ui.platform.LocalContext
+import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
 import com.google.firebase.Timestamp
 import com.google.firebase.firestore.ListenerRegistration
@@ -46,12 +49,9 @@ import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.runtime.key
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.WeekFields
-import com.google.firebase.firestore.DocumentSnapshot
 import java.util.Locale
- import kotlinx.coroutines.tasks.await
 
 enum class EventSource { USER, GLOBAL }
 
@@ -69,17 +69,35 @@ enum class EventType {
     CLASE, EXAMEN, TAREA, EVENTO
 }
 
+// helper local para selector de hijos (si se necesitase, reintroducir)
+// data class ChildInfo(val id: String, val nombre: String)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun CalendarScreen(eventId: String? = null) {
     // Separamos mes mostrado y fecha seleccionada
     var displayedMonth by remember { mutableStateOf(Calendar.getInstance()) }
-    var selectedDay by remember { mutableStateOf<Calendar?>(Calendar.getInstance()) }
+    // selected day y visibilidad del bottom sheet se mantienen en el ViewModel compartido
     var showAddEventDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // Eventos para el mes mostrado (se cargan por rango mediante snapshot listener)
-    val events = remember { mutableStateListOf<CalendarEvent>() }
+    // Usar ViewModel compartido para que todas las rutas compartan el mismo estado
+    // Obtener ViewModel scoped al Activity para que sea la misma instancia desde distintos composables
+    // obtener Activity de forma segura (evitar casteo directo de LocalContext)
+    val ctx = LocalContext.current
+    val activityOwner = remember(ctx) {
+        var c: Context? = ctx
+        var found: ComponentActivity? = null
+        while (c is ContextWrapper) {
+            if (c is ComponentActivity) { found = c; break }
+            c = c.baseContext
+        }
+        found
+    }
+    val calendarVm: CalendarViewModel = if (activityOwner != null) viewModel(activityOwner) else viewModel()
+    val profileVm: ProfileViewModel = if (activityOwner != null) viewModel(activityOwner) else viewModel()
+    val events by calendarVm.events.collectAsState()
     val auth = FirebaseAuth.getInstance()
     val db = FirebaseFirestore.getInstance()
     // user role and preferences
@@ -88,30 +106,25 @@ fun CalendarScreen(eventId: String? = null) {
     val role = userData.roleEnum
     // courses for teacher/student/child selection
     val userCourses = remember { mutableStateListOf<Pair<String,String>>() }
-    // Próximos eventos paginados y filtro por tipo
-    val upcomingEvents = remember { mutableStateListOf<CalendarEvent>() }
-    var upcomingLastSnapshot by remember { mutableStateOf<DocumentSnapshot?>(null) }
-    var selectedFilterType by remember { mutableStateOf<EventType?>(null) }
-
-    // Estado del bottom sheet para mostrar eventos del día seleccionado
-    var bottomSheetVisible by remember { mutableStateOf(false) }
-
-    // Estados para edición / borrado (deben existir para las acciones de la lista y bottom sheet)
+    // obtener lista de hijos y selección desde ProfileViewModel (fuente de verdad)
+    val childrenForParent by profileVm.children.collectAsState(initial = emptyList())
+    val selectedChildIndexValue by profileVm.selectedChildIndex.collectAsState(initial = null)
+    // estados para edición/eliminación de eventos
     var editingEvent by remember { mutableStateOf<CalendarEvent?>(null) }
     var showEditEventDialog by remember { mutableStateOf(false) }
     var eventToDelete by remember { mutableStateOf<CalendarEvent?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
-
-    // Profile VM: para padres (lista de hijos)
-    val profileVm: ProfileViewModel = viewModel()
-    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
-    var selectedChildIndex by remember { mutableStateOf(0) }
+    // Próximos eventos (derivados del ViewModel para mantener una sola fuente de verdad)
+    var upcomingLimit by remember { mutableStateOf(25) }
+    var selectedFilterType by remember { mutableStateOf<EventType?>(null) }
 
     // Listener registration manejado con DisposableEffect: soporta múltiples listeners según rol
-    DisposableEffect(displayedMonth.timeInMillis, auth.currentUser?.uid, role, selectedChildIndex) {
+    // Añadir selectedChildIndexValue a las dependencias para recargar listeners cuando el padre cambie de hijo
+    DisposableEffect(displayedMonth.timeInMillis, auth.currentUser?.uid, role, selectedChildIndexValue) {
         val userId = auth.currentUser?.uid
         val regs = mutableListOf<ListenerRegistration>()
-        events.clear()
+        // limpiar eventos en el ViewModel
+        calendarVm.setEvents(emptyList())
 
         if (userId != null) {
             // calcular primer y ultimo día del mes mostrado
@@ -147,10 +160,10 @@ fun CalendarScreen(eventId: String? = null) {
                                 val ts = doc.get("date")
                                 val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
                                 val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                                if (d != null && events.none { it.id == id }) events.add(CalendarEvent(id, title, description, d, type, EventSource.USER, userId))
+                                if (d != null) calendarVm.addOrUpdateEvent(CalendarEvent(id, title, description, d, type, EventSource.USER, userId))
                                 val rec = doc.getString("recurrence")
                                 if (!rec.isNullOrBlank() && d != null) {
-                                    try { val occ = generateOccurrences(d, rec, start.time, end.time); occ.forEachIndexed { idx, occDate -> if (events.none { it.id == "${id}_occ_$idx" }) events.add(CalendarEvent("${id}_occ_$idx", title, description, occDate, type, EventSource.USER, userId)) } } catch (_: Exception) {}
+                                    try { val occ = generateOccurrences(d, rec, start.time, end.time); occ.forEachIndexed { idx, occDate -> if (/*prevent duplicates handled by VM*/ true) calendarVm.addOrUpdateEvent(CalendarEvent("${id}_occ_$idx", title, description, occDate, type, EventSource.USER, userId)) } } catch (_: Exception) {}
                                 }
                             }
                         }
@@ -186,7 +199,7 @@ fun CalendarScreen(eventId: String? = null) {
                                                     val ts = doc.get("date")
                                                     val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
                                                     val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                                                    if (d != null && events.none { it.id == id }) events.add(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, null))
+                                                    if (d != null) calendarVm.addOrUpdateEvent(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, null))
                                                 }
                                             }
                                         }
@@ -222,7 +235,7 @@ fun CalendarScreen(eventId: String? = null) {
                                                     val ts = doc.get("date")
                                                     val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
                                                     val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                                                    if (d != null && events.none { it.id == id }) events.add(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, null))
+                                                    if (d != null) calendarVm.addOrUpdateEvent(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, null))
                                                 }
                                             }
                                         }
@@ -233,8 +246,8 @@ fun CalendarScreen(eventId: String? = null) {
                         } catch (_: Exception) { }
                     }
                     Role.PADRE -> {
-                        // parent: use selected child
-                        val childId = children.getOrNull(selectedChildIndex)?.id
+                        // parent: use selected child from ProfileViewModel
+                        val childId = childrenForParent.getOrNull(selectedChildIndexValue ?: 0)?.id
                         if (!childId.isNullOrBlank()) {
                             // personal events of child
                             val childListener = db.collection("users").document(childId).collection("events")
@@ -250,7 +263,7 @@ fun CalendarScreen(eventId: String? = null) {
                                             val ts = doc.get("date")
                                             val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
                                             val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                                            if (d != null && events.none { it.id == id }) events.add(CalendarEvent(id, title, description, d, type, EventSource.USER, childId))
+                                            if (d != null) calendarVm.addOrUpdateEvent(CalendarEvent(id, title, description, d, type, EventSource.USER, childId))
                                         }
                                     }
                                 }
@@ -274,7 +287,7 @@ fun CalendarScreen(eventId: String? = null) {
                                                         val ts = doc.get("date")
                                                         val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
                                                         val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                                                        if (d != null && events.none { it.id == id }) events.add(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, doc.getString("courseId")))
+                                                        if (d != null) calendarVm.addOrUpdateEvent(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, doc.getString("courseId")))
                                                     }
                                                 }
                                             }
@@ -288,7 +301,35 @@ fun CalendarScreen(eventId: String? = null) {
                     else -> {
                         // default: no extra listeners
                     }
-                }
+                } // <-- SE AGREGA ESTA LLAVE PARA CERRAR EL when(role)
+
+                // Nuevo: listener global para eventos creados por ADMIN (visibles desde el menú calendario)
+                try {
+                    val adminQuery = db.collection("events")
+                        .whereEqualTo("senderName", "ADMIN")
+                        .whereGreaterThanOrEqualTo("date", startTs)
+                        .whereLessThanOrEqualTo("date", endTs)
+
+                    val adminReg = adminQuery.addSnapshotListener { snapA, eA ->
+                        if (eA != null) { Log.e("CalendarScreen", "Admin events listener err: ${eA.message}"); return@addSnapshotListener }
+                        if (snapA != null) {
+                            for (doc in snapA.documents) {
+                                val id = doc.id
+                                val title = doc.getString("title") ?: "Evento"
+                                val description = doc.getString("description") ?: ""
+                                val ts = doc.get("date")
+                                val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
+                                val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
+                                if (d != null) {
+                                    // marcar como GLOBAL (evento institucional)
+                                    calendarVm.addOrUpdateEvent(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, doc.getString("courseId")))
+                                }
+                            }
+                        }
+                    }
+                    regs.add(adminReg)
+                } catch (_: Exception) { }
+
             } catch (ex: Exception) {
                 Log.e("CalendarScreen", "Error starting listeners: ${ex.message}", ex)
             }
@@ -332,24 +373,25 @@ fun CalendarScreen(eventId: String? = null) {
                     )
                     TextButton(onClick = { // volver a hoy
                         displayedMonth = Calendar.getInstance()
-                        selectedDay = Calendar.getInstance()
+                        calendarVm.setSelectedDay(Calendar.getInstance().time)
                     }) { Text("Hoy") }
 
-                    // selector de hijo para PADRE
+                    // selector de hijo para PADRE (usar ProfileViewModel como fuente)
                     if (role == Role.PADRE) {
                         Spacer(Modifier.height(8.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Hijo: ")
-                            if (children.isEmpty()) {
+                            if (childrenForParent.isEmpty()) {
                                 Text("(sin hijos)")
                             } else {
                                 var expanded by remember { mutableStateOf(false) }
-                                val label = children.getOrNull(selectedChildIndex)?.nombre ?: "Seleccionar"
+                                val selIdx = selectedChildIndexValue ?: 0
+                                val label = childrenForParent.getOrNull(selIdx)?.nombre ?: "Seleccionar"
                                 Box {
                                     TextButton(onClick = { expanded = true }) { Text(label) }
                                     DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                        children.forEachIndexed { idx, child ->
-                                            DropdownMenuItem(text = { Text(child.nombre) }, onClick = { selectedChildIndex = idx; expanded = false })
+                                        childrenForParent.forEachIndexed { idx, child ->
+                                            DropdownMenuItem(text = { Text(child.nombre) }, onClick = { profileVm.selectChildAtIndex(idx); expanded = false })
                                         }
                                     }
                                 }
@@ -416,13 +458,16 @@ fun CalendarScreen(eventId: String? = null) {
                         )
                 }) { ts ->
                        key(ts) {
+                           // pasar la fecha seleccionada desde el ViewModel
+                           val selectedMillisLocal by calendarVm.selectedDayMillis.collectAsState()
+                           val selectedCalForGrid = selectedMillisLocal?.let { Calendar.getInstance().apply { timeInMillis = it } }
                            CalendarGrid(
                                displayedMonth = displayedMonth,
-                               selectedDay = selectedDay,
+                               selectedDay = selectedCalForGrid,
                                events = events,
                                onDateSelected = { cal ->
-                                   selectedDay = cal
-                                   bottomSheetVisible = true
+                                   // delegar la selección al ViewModel compartido
+                                   calendarVm.setSelectedDay(cal.time)
                                }
                            )
                        }
@@ -431,14 +476,16 @@ fun CalendarScreen(eventId: String? = null) {
 
             Spacer(Modifier.height(16.dp))
 
-            // Botón para agregar evento
-            Button(
-                onClick = { showAddEventDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Agregar evento")
-                Spacer(Modifier.width(8.dp))
-                Text("Agregar Evento")
+            // Botón para agregar evento (solo para DOCENTE y ADMIN)
+            if (role == Role.DOCENTE || role == Role.ADMIN) {
+                Button(
+                    onClick = { showAddEventDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "Agregar evento")
+                    Spacer(Modifier.width(8.dp))
+                    Text("Agregar Evento")
+                }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -469,16 +516,14 @@ fun CalendarScreen(eventId: String? = null) {
 
             Spacer(Modifier.height(8.dp))
 
-            // carga inicial de upcoming en background (no duplicar si ya cargado)
-            LaunchedEffect(auth.currentUser?.uid) {
-                upcomingEvents.clear()
-                upcomingLastSnapshot = null
-                // pasar los courseIds disponibles (si ya se cargaron) para traer también eventos globales
-                val courseIds = userCourses.map { it.first }
-                loadMoreUpcoming(db, auth, upcomingEvents, courseIds) { doc -> upcomingLastSnapshot = doc }
+            // Mostrar próximos eventos a partir del ViewModel (mismo origen que el grid)
+            val nowDate = remember { Date() }
+            // derive upcoming list from calendarVm.events (single source of truth)
+            val allUpcoming = remember(events, nowDate) {
+                events.filter { it.date.after(nowDate) || it.date == nowDate }.sortedBy { it.date }
             }
-
-            val displayedUpcoming = if (selectedFilterType == null) upcomingEvents.toList() else upcomingEvents.filter { it.type == selectedFilterType }
+            val filteredUpcoming = if (selectedFilterType == null) allUpcoming else allUpcoming.filter { it.type == selectedFilterType }
+            val displayedUpcoming = filteredUpcoming.take(upcomingLimit)
 
             LazyColumn(
                  verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -499,29 +544,33 @@ fun CalendarScreen(eventId: String? = null) {
                 item {
                     Spacer(Modifier.height(6.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        val courseIds = userCourses.map { it.first }
-                        if (upcomingLastSnapshot != null) {
-                            Button(onClick = { loadMoreUpcoming(db, auth, upcomingEvents, courseIds) { doc -> upcomingLastSnapshot = doc } }) { Text("Cargar más") }
+                        val totalAvailable = filteredUpcoming.size
+                        if (displayedUpcoming.size < totalAvailable) {
+                            Button(onClick = { upcomingLimit += 25 }) { Text("Cargar más") }
                         }
-                    }
-                 }
-             }
-         }
+                     }
+                  }
+              }
+          }
      }
 
     // Bottom sheet para eventos del día seleccionado (simple Modal)
-    if (bottomSheetVisible && selectedDay != null) {
-        val selLocal = LocalDate.of(selectedDay!!.get(Calendar.YEAR), selectedDay!!.get(Calendar.MONTH)+1, selectedDay!!.get(Calendar.DAY_OF_MONTH))
+    // Usar el estado del ViewModel para selección y bottom sheet
+    val selectedMillis by calendarVm.selectedDayMillis.collectAsState()
+    val bottomVisibleState by calendarVm.bottomSheetVisible.collectAsState()
+
+    if (bottomVisibleState && selectedMillis != null) {
+        val selLocal = Instant.ofEpochMilli(selectedMillis!!).atZone(ZoneId.systemDefault()).toLocalDate()
         val dayEvents = events.filter { ev ->
             val evLocal = Instant.ofEpochMilli(ev.date.time).atZone(ZoneId.systemDefault()).toLocalDate()
             evLocal == selLocal
         }.sortedBy { it.date }
 
         ModalBottomSheet(
-            onDismissRequest = { bottomSheetVisible = false }
+            onDismissRequest = { calendarVm.setBottomSheetVisible(false) }
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Eventos en ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(selectedDay!!.time)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Eventos en ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedMillis!!))}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
                 if (dayEvents.isEmpty()) {
                     Text("No hay eventos para este día", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -542,7 +591,7 @@ fun CalendarScreen(eventId: String? = null) {
                 }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = { bottomSheetVisible = false }) { Text("Cerrar") }
+                    TextButton(onClick = { calendarVm.setBottomSheetVisible(false) }) { Text("Cerrar") }
                 }
             }
         }
@@ -550,7 +599,7 @@ fun CalendarScreen(eventId: String? = null) {
 
     if (showAddEventDialog) {
         AddEventDialog(
-            initialDate = selectedDay?.time ?: displayedMonth.time,
+            initialDate = selectedMillis?.let { Date(it) } ?: displayedMonth.time,
             onDismiss = { showAddEventDialog = false },
             onSave = { title, description, date, type, targetCourseId ->
                 val userId = auth.currentUser?.uid
@@ -558,10 +607,10 @@ fun CalendarScreen(eventId: String? = null) {
                     scope.launch { snackbarHostState.showSnackbar("Debes iniciar sesión para agregar eventos") }
                     return@AddEventDialog
                 }
-                val db = FirebaseFirestore.getInstance()
-                val eventId = UUID.randomUUID().toString()
+                val localDb = FirebaseFirestore.getInstance()
+                val localEventId = UUID.randomUUID().toString()
                 val eventData = hashMapOf<String, Any?>(
-                    "id" to eventId,
+                    "id" to localEventId,
                     "title" to title,
                     "description" to description,
                     "date" to Timestamp(date),
@@ -572,10 +621,10 @@ fun CalendarScreen(eventId: String? = null) {
                 // If teacher selected a course target, save as global event in top-level collection
                 if (role == Role.DOCENTE && !targetCourseId.isNullOrBlank()) {
                     eventData["courseId"] = targetCourseId
-                    db.collection("events").document(eventId)
+                    localDb.collection("events").document(localEventId)
                         .set(eventData)
                         .addOnSuccessListener {
-                            events.add(CalendarEvent(eventId, title, description, date, type, EventSource.GLOBAL, targetCourseId))
+                            calendarVm.addOrUpdateEvent(CalendarEvent(localEventId, title, description, date, type, EventSource.GLOBAL, targetCourseId))
                             showAddEventDialog = false
                             scope.launch { snackbarHostState.showSnackbar("Evento de curso agregado") }
 
@@ -583,19 +632,19 @@ fun CalendarScreen(eventId: String? = null) {
                             try {
                                 // obtener estudiantes desde subcolección courses/{courseId}/students
                                 val tcid = targetCourseId
-                                db.collection("courses").document(tcid).collection("students").get()
+                                localDb.collection("courses").document(tcid).collection("students").get()
                                     .addOnSuccessListener { studsSnap ->
                                         val studentIds = if (!studsSnap.isEmpty) studsSnap.documents.mapNotNull { it.id } else emptyList()
                                         if (studentIds.isEmpty()) {
                                             // fallback: si no hay subcoleccion, intentar buscar en students collection por courseId
-                                            db.collection("students").whereEqualTo("courseId", tcid).get()
+                                            localDb.collection("students").whereEqualTo("courseId", tcid).get()
                                                 .addOnSuccessListener { altSnap ->
                                                     val altIds = altSnap.documents.mapNotNull { it.id }
                                                     // resolver senderName y crear notifs
-                                                    resolveAndCreateNotifs(altIds, title, description, eventId, db, auth)
+                                                    resolveAndCreateNotifs(altIds, title, description, localEventId, localDb, auth)
                                                 }
                                         } else {
-                                            resolveAndCreateNotifs(studentIds, title, description, eventId, db, auth)
+                                            resolveAndCreateNotifs(studentIds, title, description, localEventId, localDb, auth)
                                         }
                                     }
                             } catch (e: Exception) {
@@ -608,10 +657,10 @@ fun CalendarScreen(eventId: String? = null) {
                         }
                 } else {
                     // save personal event under users/{uid}/events
-                    db.collection("users").document(userId).collection("events").document(eventId)
+                    localDb.collection("users").document(userId).collection("events").document(localEventId)
                         .set(eventData)
                         .addOnSuccessListener {
-                            events.add(CalendarEvent(eventId, title, description, date, type, EventSource.USER, userId))
+                            calendarVm.addOrUpdateEvent(CalendarEvent(localEventId, title, description, date, type, EventSource.USER, userId))
                             showAddEventDialog = false
                             scope.launch { snackbarHostState.showSnackbar("Evento agregado") }
                         }
@@ -639,8 +688,8 @@ fun CalendarScreen(eventId: String? = null) {
                     db.collection("users").document(owner).collection("events").document(ev.id)
                         .delete()
                         .addOnSuccessListener {
-                            events.removeAll { it.id == ev.id }
-                            upcomingEvents.removeAll { it.id == ev.id }
+                            calendarVm.removeEvent(ev.id)
+                            // no local upcomingEvents state any more: view is derived from calendarVm.events
                             showDeleteConfirm = false
                             eventToDelete = null
                         }
@@ -653,8 +702,8 @@ fun CalendarScreen(eventId: String? = null) {
                     db.collection("events").document(ev.id)
                         .delete()
                         .addOnSuccessListener {
-                            events.removeAll { it.id == ev.id }
-                            upcomingEvents.removeAll { it.id == ev.id }
+                            calendarVm.removeEvent(ev.id)
+                            // no local upcomingEvents state any more
                             showDeleteConfirm = false
                             eventToDelete = null
                         }
@@ -679,13 +728,9 @@ fun CalendarScreen(eventId: String? = null) {
                 db.collection("users").document(owner).collection("events").document(updated.id)
                     .update(map)
                     .addOnSuccessListener {
-                        fun replace(list: MutableList<CalendarEvent>) {
-                            val idx = list.indexOfFirst { it.id == updated.id }
-                            if (idx >= 0) list[idx] = updated
-                        }
-                        replace(events)
-                        replace(upcomingEvents)
-                        showEditEventDialog = false; editingEvent = null
+                        // actualizar también en ViewModel compartido
+                        calendarVm.addOrUpdateEvent(updated)
+                         showEditEventDialog = false; editingEvent = null
                     }
                     .addOnFailureListener { ex -> scope.launch { snackbarHostState.showSnackbar("Error actualizando: ${ex.localizedMessage}") } }
              } else {
@@ -695,64 +740,21 @@ fun CalendarScreen(eventId: String? = null) {
                  if (!updated.ownerId.isNullOrBlank()) mapWithCourse["courseId"] = updated.ownerId
                  db.collection("events").document(updated.id).update(mapWithCourse as Map<String, Any?>)
                       .addOnSuccessListener {
-                          fun replace(list: MutableList<CalendarEvent>) {
-                              val idx = list.indexOfFirst { it.id == updated.id }
-                              if (idx >= 0) list[idx] = updated
-                          }
-                          replace(events)
-                          replace(upcomingEvents)
-                          showEditEventDialog = false
-                          editingEvent = null
-                      }
-                      .addOnFailureListener { ex -> scope.launch { snackbarHostState.showSnackbar("Error actualizando: ${ex.localizedMessage}") } }
+                          // actualizar también en ViewModel compartido
+                          calendarVm.addOrUpdateEvent(updated)
+                           showEditEventDialog = false
+                           editingEvent = null
+                       }
+                       .addOnFailureListener { ex -> scope.launch { snackbarHostState.showSnackbar("Error actualizando: ${ex.localizedMessage}") } }
              }
          }, role = role, userCourses = userCourses.toList())
-      }
+       }
 
     // After listeners are set up, if an eventId was provided attempt to locate and select it
     LaunchedEffect(eventId) {
         if (eventId.isNullOrBlank()) return@LaunchedEffect
-        // try to find locally first
-        val found = events.find { it.id == eventId }
-        if (found != null) {
-            selectedDay = Calendar.getInstance().apply { time = found.date }
-            bottomSheetVisible = true
-        } else {
-            // try to fetch from top-level events
-            try {
-                val doc = db.collection("events").document(eventId).get().await()
-                if (doc.exists()) {
-                    val title = doc.getString("title") ?: "Evento"
-                    val description = doc.getString("description") ?: ""
-                    val ts = doc.get("date")
-                    val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
-                    val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                    if (d != null) {
-                        selectedDay = Calendar.getInstance().apply { time = d }
-                        events.add(CalendarEvent(eventId, title, description, d, type, EventSource.GLOBAL, doc.getString("courseId")))
-                        bottomSheetVisible = true
-                    }
-                } else {
-                    // try users/{uid}/events
-                    val uid = auth.currentUser?.uid
-                    if (!uid.isNullOrBlank()) {
-                        val ud = db.collection("users").document(uid).collection("events").document(eventId).get().await()
-                        if (ud.exists()) {
-                            val title = ud.getString("title") ?: "Evento"
-                            val description = ud.getString("description") ?: ""
-                            val ts = ud.get("date")
-                            val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
-                            val type = try { EventType.valueOf(ud.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                            if (d != null) {
-                                selectedDay = Calendar.getInstance().apply { time = d }
-                                events.add(CalendarEvent(eventId, title, description, d, type, EventSource.USER, uid))
-                                bottomSheetVisible = true
-                            }
-                        }
-                    }
-                }
-            } catch (_: Exception) { }
-        }
+        // selectEventById accepts a single eventId string in the ViewModel
+        calendarVm.selectEventById(eventId)
     }
 }
 
@@ -946,113 +948,124 @@ private fun AddEventDialog(
      role: Role?,
      userCourses: List<Pair<String,String>> = emptyList()
  ) {
-    val context = LocalContext.current
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    // fecha y hora seleccionadas separadas
-    var dateCal by remember { mutableStateOf(Calendar.getInstance().apply { time = initialDate }) }
-    var type by remember { mutableStateOf(EventType.EVENTO) }
-    var targetCourseId by remember { mutableStateOf<String?>(null) }
+     val context = LocalContext.current
+     var title by remember { mutableStateOf("") }
+     var description by remember { mutableStateOf("") }
+     var dateCal by remember { mutableStateOf(Calendar.getInstance().apply { time = initialDate }) }
+     var type by remember { mutableStateOf(EventType.EVENTO) }
+     var targetCourseId by remember { mutableStateOf<String?>(null) }
 
-    // funciones auxiliares para abrir pickers nativos
-    fun openDatePicker() {
-        val c = dateCal
-        android.app.DatePickerDialog(context, { _, y, m, d ->
-            c.set(Calendar.YEAR, y)
-            c.set(Calendar.MONTH, m)
-            c.set(Calendar.DAY_OF_MONTH, d)
-            dateCal = c
-        }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
-    }
+     fun openDatePicker() {
+         val c = dateCal
+         android.app.DatePickerDialog(context, { _, y, m, d ->
+             c.set(Calendar.YEAR, y)
+             c.set(Calendar.MONTH, m)
+             c.set(Calendar.DAY_OF_MONTH, d)
+             dateCal = c
+         }, c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH)).show()
+     }
 
-    fun openTimePicker() {
-        val c = dateCal
-        android.app.TimePickerDialog(context, { _, hour, minute ->
-            c.set(Calendar.HOUR_OF_DAY, hour)
-            c.set(Calendar.MINUTE, minute)
-            c.set(Calendar.SECOND, 0)
-            dateCal = c
-        }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), true).show()
-    }
+     fun openTimePicker() {
+         val c = dateCal
+         android.app.TimePickerDialog(context, { _, hour, minute ->
+             c.set(Calendar.HOUR_OF_DAY, hour)
+             c.set(Calendar.MINUTE, minute)
+             c.set(Calendar.SECOND, 0)
+             dateCal = c
+         }, c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE), true).show()
+     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Agregar Evento") },
-        text = {
-            Column {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título") }, singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descripción") })
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(dateCal.time)}")
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { openDatePicker() }) { Text("Seleccionar fecha") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Hora: ${String.format(Locale.getDefault(), "%02d:%02d", dateCal.get(Calendar.HOUR_OF_DAY), dateCal.get(Calendar.MINUTE))}")
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { openTimePicker() }) { Text("Seleccionar hora") }
-                }
-                Spacer(Modifier.height(8.dp))
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    EventType.entries.forEach { ev ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            RadioButton(selected = type == ev, onClick = { type = ev })
-                            Spacer(Modifier.width(8.dp))
-                            Text(ev.name, modifier = Modifier.weight(1f))
-                        }
-                    }
-                }
+     val canAdd = (role == Role.DOCENTE || role == Role.ADMIN)
 
-                // target course selection for teachers
-                if (role == Role.DOCENTE) {
-                    Spacer(Modifier.height(8.dp))
-                    Text("Curso objetivo (opcional):", style = MaterialTheme.typography.labelMedium)
-                    // mostrar cursos disponibles para el docente
-                    LazyColumn(
-                        modifier = Modifier.heightIn(max = 200.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(userCourses) { course ->
-                            val isSelected = targetCourseId == course.first
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { targetCourseId = if (isSelected) null else course.first }
-                                    .padding(8.dp)
-                                    .background(
-                                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
-                                        shape = CircleShape
-                                    ),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(course.second, modifier = Modifier.weight(1f))
-                                if (isSelected) {
-                                    Icon(Icons.Filled.Check, contentDescription = "Seleccionado", tint = MaterialTheme.colorScheme.primary)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (title.isBlank()) return@TextButton
-                onSave(title, description, dateCal.time, type, targetCourseId)
-            }) { Text("Guardar") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cerrar") }
-        }
-    )
+     AlertDialog(
+         onDismissRequest = onDismiss,
+         title = { Text("Agregar Evento") },
+         text = {
+             Column {
+                 OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Título") }, singleLine = true)
+                 Spacer(Modifier.height(8.dp))
+                 OutlinedTextField(value = description, onValueChange = { description = it }, label = { Text("Descripción") })
+                 Spacer(Modifier.height(8.dp))
+
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Text("Fecha: ${SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(dateCal.time)}")
+                     Spacer(Modifier.width(8.dp))
+                     TextButton(onClick = { openDatePicker() }) { Text("Seleccionar fecha") }
+                 }
+
+                 Spacer(Modifier.height(8.dp))
+
+                 Row(verticalAlignment = Alignment.CenterVertically) {
+                     Text("Hora: ${String.format(Locale.getDefault(), "%02d:%02d", dateCal.get(Calendar.HOUR_OF_DAY), dateCal.get(Calendar.MINUTE))}")
+                     Spacer(Modifier.width(8.dp))
+                     TextButton(onClick = { openTimePicker() }) { Text("Seleccionar hora") }
+                 }
+
+                 Spacer(Modifier.height(8.dp))
+
+                 Column(modifier = Modifier.fillMaxWidth()) {
+                     EventType.values().forEach { ev ->
+                         Row(
+                             verticalAlignment = Alignment.CenterVertically,
+                             modifier = Modifier
+                                 .fillMaxWidth()
+                                 .padding(vertical = 4.dp)
+                         ) {
+                             RadioButton(selected = type == ev, onClick = { type = ev })
+                             Spacer(Modifier.width(8.dp))
+                             Text(ev.name, modifier = Modifier.weight(1f))
+                         }
+                     }
+                 }
+
+                 // Selección de curso solo para docentes
+                 if (role == Role.DOCENTE) {
+                     Spacer(Modifier.height(8.dp))
+                     Text("Curso objetivo (opcional):", style = MaterialTheme.typography.labelMedium)
+                     LazyColumn(
+                         modifier = Modifier.heightIn(max = 200.dp),
+                         verticalArrangement = Arrangement.spacedBy(4.dp)
+                     ) {
+                         items(userCourses) { course ->
+                             val isSelected = targetCourseId == course.first
+                             Row(
+                                 modifier = Modifier
+                                     .fillMaxWidth()
+                                     .clickable { targetCourseId = if (isSelected) null else course.first }
+                                     .padding(8.dp)
+                                     .background(
+                                         color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                                         shape = CircleShape
+                                     ),
+                                 verticalAlignment = Alignment.CenterVertically
+                             ) {
+                                 Text(course.second, modifier = Modifier.weight(1f))
+                                 if (isSelected) Icon(Icons.Filled.Check, contentDescription = "Seleccionado", tint = MaterialTheme.colorScheme.primary)
+                             }
+                         }
+                     }
+                 }
+
+                 // Mensaje si el rol no tiene permisos
+                 if (!canAdd) {
+                     Spacer(Modifier.height(8.dp))
+                     Text("No tienes permisos para crear eventos.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                 }
+             }
+         },
+         confirmButton = {
+             TextButton(onClick = {
+                 if (!canAdd) return@TextButton
+                 if (title.isBlank()) return@TextButton
+                 onSave(title, description, dateCal.time, type, targetCourseId)
+             }, enabled = canAdd) {
+                 Text(if (canAdd) "Guardar" else "No permitido")
+             }
+         },
+         dismissButton = {
+             TextButton(onClick = onDismiss) { Text("Cerrar") }
+         }
+     )
 }
 
 @Composable
@@ -1147,56 +1160,6 @@ private fun EditEventDialog(event: CalendarEvent, onDismiss: () -> Unit, onSave:
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cerrar") } })
 }
 
-// helper to load upcoming events paginated
-private fun loadMoreUpcoming(db: FirebaseFirestore, auth: FirebaseAuth, dest: MutableList<CalendarEvent>, courseIds: List<String> = emptyList(), lastSnapshot: DocumentSnapshot? = null, cbLast: (DocumentSnapshot?) -> Unit) {
-    val uid = auth.currentUser?.uid ?: return
-    val col = db.collection("users").document(uid).collection("events")
-    val PAGE_SIZE = 25
-    try {
-        var q = col.whereGreaterThanOrEqualTo("date", Timestamp.now()).orderBy("date")
-        if (lastSnapshot != null) q = q.startAfter(lastSnapshot)
-        q = q.limit(PAGE_SIZE.toLong())
-        q.get().addOnSuccessListener { snap ->
-            val docs = snap.documents
-            for (doc in docs) {
-                val id = doc.id
-                val title = doc.getString("title") ?: "Evento"
-                val description = doc.getString("description") ?: ""
-                val ts = doc.get("date")
-                val d = when (ts) {
-                    is Timestamp -> ts.toDate()
-                    is Date -> ts
-                    else -> null
-                }
-                val type = try { EventType.valueOf(doc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                val owner = doc.getString("ownerId")
-                if (d != null) dest.add(CalendarEvent(id, title, description, d, type, EventSource.USER, owner))
-            }
-            cbLast(docs.lastOrNull())
-             // additionally fetch upcoming global events for user's courses (no strict pagination)
-             if (courseIds.isNotEmpty()) {
-                 courseIds.chunked(10).forEach { chunk ->
-                     db.collection("events").whereIn("courseId", chunk).whereGreaterThanOrEqualTo("date", Timestamp.now()).orderBy("date").limit(PAGE_SIZE.toLong()).get().addOnSuccessListener { gsnap ->
-                         for (gdoc in gsnap.documents) {
-                             val id = gdoc.id
-                             if (dest.any { it.id == id }) continue
-                             val title = gdoc.getString("title") ?: "Evento"
-                             val description = gdoc.getString("description") ?: ""
-                             val ts = gdoc.get("date")
-                             val d = when (ts) { is Timestamp -> ts.toDate(); is Date -> ts; else -> null }
-                             val type = try { EventType.valueOf(gdoc.getString("type") ?: EventType.EVENTO.name) } catch (_: Exception) { EventType.EVENTO }
-                             val courseId = gdoc.getString("courseId")
-                             if (d != null) dest.add(CalendarEvent(id, title, description, d, type, EventSource.GLOBAL, courseId))
-                         }
-                     }
-                 }
-             }
-         }
-     } catch (_: Exception) {
-         // ignore
-         cbLast(null)
-     }
- }
 
 // helper: crea notificaciones en users/{id}/notifications
 fun createNotifsForIds(ids: List<String>, title: String, body: String, relatedId: String, db: FirebaseFirestore, auth: FirebaseAuth) {
