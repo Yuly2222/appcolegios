@@ -42,7 +42,9 @@ fun NotesScreen() {
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val isStudent = (userData.role ?: "").equals("ESTUDIANTE", ignoreCase = true)
 
-    var selectedChildIndex by remember { mutableStateOf(0) }
+    // Usar el índice seleccionado centralizado en ProfileViewModel para evitar parpadeos
+    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState()
+    val selectedChildIndex = selectedIndexState ?: 0
     var showSelectChildDialog by remember { mutableStateOf(false) }
 
     // Estado de notas cargadas desde Firestore
@@ -56,9 +58,11 @@ fun NotesScreen() {
     // Nombre resuelto que se mostrará en el header (resolver con jerarquía)
     var resolvedName by remember { mutableStateOf<String?>(null) }
 
-    // seleccionar primer hijo automáticamente si existe
+    // seleccionar primer hijo automáticamente si existe y aún no hay selección en el ViewModel
     LaunchedEffect(children) {
-        if (children.isNotEmpty()) selectedChildIndex = 0
+        if (children.isNotEmpty() && selectedIndexState == null) {
+            profileVm.selectChildAtIndex(0)
+        }
     }
 
     // Cargar notas reales desde Firestore cuando cambie la selección o el usuario
@@ -67,6 +71,7 @@ fun NotesScreen() {
         errorMsg = null
         grades = emptyList()
         try {
+            // Para padres, preferimos el id del hijo seleccionado (si existe). Evitamos usar el id del padre.
             val uid = if (isStudent) auth.currentUser?.uid else children.getOrNull(selectedChildIndex)?.id
             if (uid.isNullOrBlank()) {
                 // sin id, no cargar
@@ -92,14 +97,23 @@ fun NotesScreen() {
     }
 
     // Resolver nombre cuando cambian la selección, hijos o preferencias
+    // Regla: si hay hijos (usuario PADRE), siempre mostrar el nombre del hijo seleccionado (si existe).
+    // Solo si es estudiante mostramos el nombre del propio usuario.
     LaunchedEffect(selectedChildIndex, children, userData) {
-        val candidateChild = children.getOrNull(selectedChildIndex)
-        val candidateName = candidateChild?.nombre
-        // Priorizar nombre del student; si no existe, usar el name almacenado en preferencias o el displayName del auth
-        resolvedName = when {
-            !candidateName.isNullOrBlank() -> candidateName
-            !userData.name.isNullOrBlank() -> userData.name
-            else -> auth.currentUser?.displayName ?: "--"
+        resolvedName = if (!isStudent && children.isNotEmpty()) {
+            children.getOrNull(selectedChildIndex)?.nombre ?: "--"
+        } else if (isStudent) {
+            // comportamiento original para estudiantes
+            val candidateChild = children.getOrNull(selectedChildIndex)
+            val candidateName = candidateChild?.nombre
+            when {
+                !candidateName.isNullOrBlank() -> candidateName
+                !userData.name.isNullOrBlank() -> userData.name
+                else -> auth.currentUser?.displayName ?: "--"
+            }
+        } else {
+            // PADRE sin hijos: mostrar vacío/neutro en lugar del nombre del padre para evitar parpadeos
+            "--"
         }
     }
 
@@ -176,7 +190,7 @@ fun NotesScreen() {
                         }
                     }
                 }
-            }, confirmButton = { TextButton(onClick = { selectedChildIndex = sel; showSelectChildDialog = false }) { Text("Aceptar") } }, dismissButton = { TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") } })
+            }, confirmButton = { TextButton(onClick = { profileVm.selectChildAtIndex(sel); showSelectChildDialog = false }) { Text("Aceptar") } }, dismissButton = { TextButton(onClick = { showSelectChildDialog = false }) { Text("Cancelar") } })
         }
 
         Spacer(Modifier.height(16.dp))

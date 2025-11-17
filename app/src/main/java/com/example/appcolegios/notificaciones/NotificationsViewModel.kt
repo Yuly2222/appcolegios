@@ -126,18 +126,13 @@ class NotificationsViewModel : ViewModel() {
                         for (cid in childIds) {
                             try {
                                 val csnap = db.collection("users").document(cid).collection("notifications").orderBy("fechaHora", Query.Direction.DESCENDING).get().await()
-                                // intentar resolver nombre del hijo (students o users)
+                                // intentar resolver nombre del hijo (usar sólo users/{cid} para evitar doble llamada)
                                 var childName: String? = null
                                 try {
-                                    val sdoc = db.collection("students").document(cid).get().await()
-                                    if (sdoc.exists()) childName = sdoc.getString("nombre") ?: sdoc.getString("name")
+                                    // sólo consultamos users/{cid} para obtener el nombre (evita lectura duplicada en students)
+                                    val udoc = db.collection("users").document(cid).get().await()
+                                    if (udoc.exists()) childName = udoc.getString("name") ?: udoc.getString("displayName")
                                 } catch (_: Exception) { }
-                                if (childName.isNullOrBlank()) {
-                                    try {
-                                        val udoc = db.collection("users").document(cid).get().await()
-                                        if (udoc.exists()) childName = udoc.getString("name") ?: udoc.getString("displayName")
-                                    } catch (_: Exception) { }
-                                }
 
                                 for (doc in csnap.documents) {
                                     val n = doc.toObject(Notification::class.java)
@@ -147,7 +142,8 @@ class NotificationsViewModel : ViewModel() {
                                         val mapped = n.copy(
                                             id = prefixedId,
                                             remitente = childName ?: n.remitente,
-                                            senderName = n.senderName ?: childName
+                                            // Priorizar el nombre del hijo si está disponible; si no, usar senderName o remitente
+                                            senderName = childName ?: n.senderName ?: n.remitente
                                         )
                                         extraNotifications.add(mapped)
                                     }

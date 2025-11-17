@@ -17,6 +17,13 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.appcolegios.navigation.AppRoutes
 
+// Nuevos imports para Firebase
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.tasks.await
+import androidx.compose.ui.platform.LocalContext
+import com.example.appcolegios.R
+
 data class TeacherDashboardState(
     val teacherName: String = "",
     val assignedCourses: List<CourseInfo> = emptyList(),
@@ -49,11 +56,18 @@ data class ActivityInfo(
 @Composable
 fun TeacherHomeScreen(navController: NavController, displayName: String? = null) {
     var state by remember { mutableStateOf(TeacherDashboardState()) }
+    // Capturar contexto composable para uso seguro dentro de coroutines
+    val context = LocalContext.current
 
     LaunchedEffect(displayName) {
-        state = loadTeacherDashboardData().copy(
-            teacherName = displayName?.takeIf { it.isNotBlank() } ?: "Docente"
-        )
+        // Usamos el uid actual si está disponible para intentar cargar nombre desde Firestore
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+        val fetchedState = loadTeacherDashboardData(uid)
+        // Determinar el nombre final: preferir displayName > fetchedState > string resource
+        val teacherNameToUse = displayName?.takeIf { it.isNotBlank() }
+            ?: fetchedState.teacherName.takeIf { it.isNotBlank() }
+            ?: context.getString(R.string.role_teacher)
+        state = fetchedState.copy(teacherName = teacherNameToUse)
     }
 
     if (state.loading) {
@@ -81,42 +95,48 @@ fun TeacherHomeScreen(navController: NavController, displayName: String? = null)
             }
 
             // Clases de hoy
-            item {
-                Text(
-                    "Clases de Hoy",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            if (state.todayClasses.isNotEmpty()) {
+                item {
+                    Text(
+                        "Clases de Hoy",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-            items(state.todayClasses) { classInfo ->
-                ClassCard(classInfo)
+                items(state.todayClasses) { classInfo ->
+                    ClassCard(classInfo)
+                }
             }
 
             // Cursos asignados
-            item {
-                Text(
-                    "Mis Cursos",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            if (state.assignedCourses.isNotEmpty()) {
+                item {
+                    Text(
+                        "Mis Cursos",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-            items(state.assignedCourses) { course ->
-                CourseCard(course)
+                items(state.assignedCourses) { course ->
+                    CourseCard(course)
+                }
             }
 
             // Actividades recientes
-            item {
-                Text(
-                    "Actividades Publicadas",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            if (state.recentActivities.isNotEmpty()) {
+                item {
+                    Text(
+                        "Actividades Publicadas",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
 
-            items(state.recentActivities) { activity ->
-                ActivityCard(activity)
+                items(state.recentActivities) { activity ->
+                    ActivityCard(activity)
+                }
             }
         }
     }
@@ -362,25 +382,80 @@ private fun ActivityCard(activity: ActivityInfo) {
     }
 }
 
-private fun loadTeacherDashboardData(): TeacherDashboardState {
-    return TeacherDashboardState(
-        teacherName = "Docente",
-        assignedCourses = listOf(
-            CourseInfo("10-A", 32, "Matemáticas"),
-            CourseInfo("10-B", 28, "Matemáticas"),
-            CourseInfo("11-A", 30, "Física")
-        ),
-        pendingGrades = 15,
-        todayClasses = listOf(
-            ClassInfo("Matemáticas", "10-A", "07:00", "A-201"),
-            ClassInfo("Física", "11-A", "09:00", "LAB-02"),
-            ClassInfo("Matemáticas", "10-B", "14:00", "A-105")
-        ),
-        recentActivities = listOf(
-            ActivityInfo("Ejercicios de Álgebra", "TAREA", "10-A", "2025-01-20"),
-            ActivityInfo("Quiz Trigonometría", "EXAMEN", "10-B", "2025-01-22"),
-            ActivityInfo("Laboratorio de Física", "PRÁCTICA", "11-A", "2025-01-25")
-        ),
+// Ahora la función intenta obtener el nombre del docente desde Firestore usando el uid; si falla, mantiene el fallback estático.
+suspend fun loadTeacherDashboardData(userId: String?): TeacherDashboardState {
+    // Datos de fallback vacíos (sin ejemplos estáticos)
+    val fallback = TeacherDashboardState(
+        teacherName = "",
+        assignedCourses = emptyList(),
+        pendingGrades = 0,
+        todayClasses = emptyList(),
+        recentActivities = emptyList(),
         loading = false
     )
+
+    // Intentamos leer el documento del docente en Firestore si tenemos uid
+    if (userId.isNullOrBlank()) {
+        return fallback
+    }
+
+    return try {
+        val doc = FirebaseFirestore.getInstance()
+            .collection("teachers")
+            .document(userId)
+            .get()
+            .await()
+
+        if (!doc.exists()) {
+            fallback
+        } else {
+            // Intentar mapear listas desde el documento si están presentes
+            val assignedCourses = mutableListOf<CourseInfo>()
+            (doc.get("assignedCourses") as? List<*>)?.forEach { item ->
+                val m = item as? Map<*,*>
+                val name = (m?.get("name") as? String) ?: (m?.get("curso") as? String) ?: ""
+                val studentsCount = when (val sc = m?.get("studentsCount")) {
+                    is Long -> sc.toInt()
+                    is Int -> sc
+                    is Double -> sc.toInt()
+                    else -> 0
+                }
+                val subject = (m?.get("subject") as? String) ?: (m?.get("materia") as? String) ?: ""
+                if (name.isNotBlank()) assignedCourses.add(CourseInfo(name, studentsCount, subject))
+            }
+
+            val todayClasses = mutableListOf<ClassInfo>()
+            (doc.get("todayClasses") as? List<*>)?.forEach { item ->
+                val m = item as? Map<*,*>
+                val subject = (m?.get("subject") as? String) ?: ""
+                val course = (m?.get("course") as? String) ?: (m?.get("curso") as? String) ?: ""
+                val time = (m?.get("time") as? String) ?: (m?.get("hora") as? String) ?: ""
+                val room = (m?.get("room") as? String) ?: (m?.get("salon") as? String) ?: ""
+                if (subject.isNotBlank() || course.isNotBlank()) todayClasses.add(ClassInfo(subject, course, time, room))
+            }
+
+            val recentActivities = mutableListOf<ActivityInfo>()
+            (doc.get("recentActivities") as? List<*>)?.forEach { item ->
+                val m = item as? Map<*,*>
+                val title = (m?.get("title") as? String) ?: (m?.get("titulo") as? String) ?: ""
+                val type = (m?.get("type") as? String) ?: (m?.get("tipo") as? String) ?: ""
+                val course = (m?.get("course") as? String) ?: (m?.get("curso") as? String) ?: ""
+                val dueDate = (m?.get("dueDate") as? String) ?: (m?.get("fecha") as? String) ?: ""
+                if (title.isNotBlank()) recentActivities.add(ActivityInfo(title, type, course, dueDate))
+            }
+
+            val nameFromFs = (doc.getString("displayName") ?: doc.getString("name"))
+            TeacherDashboardState(
+                teacherName = nameFromFs ?: "",
+                assignedCourses = assignedCourses,
+                pendingGrades = (doc.getLong("pendingGrades")?.toInt() ?: doc.getString("pendingGrades")?.toIntOrNull() ?: 0),
+                todayClasses = todayClasses,
+                recentActivities = recentActivities,
+                loading = false
+            )
+        }
+    } catch (e: Exception) {
+        // En caso de error de red o permisos devolvemos el fallback
+        fallback
+    }
 }

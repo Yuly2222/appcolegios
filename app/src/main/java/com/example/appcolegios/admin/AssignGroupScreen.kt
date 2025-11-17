@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.google.firebase.firestore.FieldValue
@@ -180,7 +181,10 @@ fun AssignGroupScreen(navController: NavController?) {
                      }
                  }
 
-                 if (!foundName.isNullOrBlank()) Text("Docente: ${foundName} (uid=${foundUid})", style = MaterialTheme.typography.bodyMedium)
+                 val foundNameLocal = foundName
+                 if (!foundNameLocal.isNullOrBlank()) {
+                     Text(stringResource(com.example.appcolegios.R.string.teacher_found_with_uid, foundNameLocal, foundUid ?: ""), style = MaterialTheme.typography.bodyMedium)
+                 }
                  if (!dialogMessage.isNullOrBlank()) Text(dialogMessage!!, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                  if (dialogLoading) Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
 

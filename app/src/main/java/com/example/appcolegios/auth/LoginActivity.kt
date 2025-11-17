@@ -17,6 +17,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import android.util.Log
+import android.view.View
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var auth: FirebaseAuth
@@ -30,6 +31,7 @@ class LoginActivity : AppCompatActivity() {
         val emailInput: EditText = findViewById(R.id.emailInput)
         val passwordInput: EditText = findViewById(R.id.passwordInput)
         val loginButton: MaterialButton = findViewById(R.id.loginButton)
+        val loginProgressContainer: View = findViewById(R.id.loginProgressContainer)
         val resetLink: TextView = findViewById(R.id.resetLink)
 
         loginButton.setOnClickListener {
@@ -38,6 +40,11 @@ class LoginActivity : AppCompatActivity() {
             if (email.isEmpty() || password.isEmpty()) {
                 Toast.makeText(this, "Ingresa email y contraseña", Toast.LENGTH_SHORT).show()
             } else {
+                // Mostrar indicador y deshabilitar botón mientras se procesa
+                val prevText = loginButton.text
+                loginProgressContainer.visibility = View.VISIBLE
+                loginButton.isEnabled = false
+                loginButton.text = getString(R.string.ingresando)
                 // Usar coroutines para control más sencillo y fallback
                 lifecycleScope.launch {
                     try {
@@ -123,6 +130,11 @@ class LoginActivity : AppCompatActivity() {
                         finish()
                     } catch (e: Exception) {
                         Toast.makeText(this@LoginActivity, "Error: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        // Restaurar estado UI
+                        loginProgressContainer.visibility = View.GONE
+                        loginButton.isEnabled = true
+                        loginButton.text = prevText
                     }
                 }
              }

@@ -95,6 +95,33 @@
             app:cornerRadius="12dp"
             app:elevation="2dp" />
 
+        <!-- Indicador de progreso oculto: se muestra cuando el usuario pulsa Ingresar -->
+        <LinearLayout
+            android:id="@+id/loginProgressContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:visibility="gone"
+            android:layout_marginTop="12dp">
+
+            <ProgressBar
+                android:id="@+id/loginProgress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:indeterminate="true" />
+
+            <TextView
+                android:id="@+id/loginStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ingresando..."
+                android:textColor="@color/on_surface"
+                android:layout_marginStart="8dp"
+                android:textSize="14sp" />
+
+        </LinearLayout>
 
         <TextView
             android:id="@+id/resetLink"

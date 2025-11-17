@@ -251,44 +251,11 @@ class ProfileViewModel : ViewModel() {
                          }
                          _student.value = Result.success(fallbackFromGrupos)
                      } else {
-                        Log.d(TAG, "loadStudentData: students/$userId not found, trying users/$userId")
-                        // Intentar leer desde users/{uid} cuando no exista students/{uid}
-                        try {
-                            val userDoc = db.collection("users").document(userId).get().await()
-                            if (userDoc.exists()) {
-                                Log.d(TAG, "loadStudentData: found users/$userId, fields: name=${userDoc.getString("name")}, curso=${userDoc.getString("curso")}, grupo=${userDoc.getString("grupo")}, avatarUrlExists=${userDoc.getString("avatarUrl") != null || userDoc.getString("avatarBase64") != null}")
-                                val name = userDoc.getString("name") ?: userDoc.getString("displayName") ?: ""
-                                val rawCurso = userDoc.getString("curso") ?: userDoc.getString("course") ?: ""
-                                val rawGrupo = userDoc.getString("grupo") ?: userDoc.getString("group") ?: ""
-                                val (cursoNormalized, grupoNormalized) = normalizeCourseKey(rawCurso)
-                                val grupoFinal = if (grupoNormalized.isNotBlank()) grupoNormalized else rawGrupo
-                                val avatarBase64 = userDoc.getString("avatarBase64")
-                                val avatar = when {
-                                    !avatarBase64.isNullOrBlank() -> "data:image/jpeg;base64,$avatarBase64"
-                                    !rawGrupo.isNullOrBlank() -> null
-                                    else -> null
-                                }
-                                val promedio = try { (userDoc.getDouble("promedio") ?: userDoc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
-                                val mapped = Student(
-                                    id = userId,
-                                    nombre = name,
-                                    curso = cursoNormalized.ifBlank { rawCurso },
-                                    grupo = grupoFinal,
-                                    promedio = promedio,
-                                    avatarUrl = avatar
-                                )
-                                Log.d(TAG, "loadStudentData: mapped Student from users/$userId -> $mapped")
-                                _student.value = Result.success(mapped)
-                            } else {
-                                Log.d(TAG, "loadStudentData: users/$userId not found either, returning empty Student")
-                                // Ningún documento encontrado: devolver Student vacío
-                                _student.value = Result.success(Student(id = userId))
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "loadStudentData: error reading users/$userId", e)
-                            _student.value = Result.failure(e)
-                        }
-                    }
+                        // students/$userId no existe: no poblar _student con datos de users/{userId}
+                        // Esto evita que el ViewModel muestre temporalmente el nombre del padre en pantallas de PADRE.
+                        Log.d(TAG, "loadStudentData: students/$userId not found, skipping users fallback to avoid showing parent as student")
+                        _student.value = Result.success(null)
+                     }
                 } catch (e: Exception) {
                     _student.value = Result.failure(e)
                 }

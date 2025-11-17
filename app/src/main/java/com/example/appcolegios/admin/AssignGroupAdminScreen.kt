@@ -24,6 +24,8 @@ import kotlinx.coroutines.tasks.await
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
+import androidx.compose.ui.res.stringResource
+import com.example.appcolegios.R
 
 /**
  * Pantalla que reemplaza al antiguo AssignGroupDialog.
@@ -38,14 +40,12 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
     var identifier by remember { mutableStateOf(initialIdentifier ?: "") }
     var curso by remember { mutableStateOf("") }
     var grupo by remember { mutableStateOf("") }
-    var studentName by remember { mutableStateOf("") }
-    var dialogLoading by remember { mutableStateOf(false) }
-    var dialogMessage by remember { mutableStateOf<String?>(null) }
-    var foundUid by remember { mutableStateOf<String?>(null) }
-    var foundName by remember { mutableStateOf<String?>(null) }
+     var dialogLoading by remember { mutableStateOf(false) }
+     var dialogMessage by remember { mutableStateOf<String?>(null) }
 
     var targetType by remember { mutableStateOf(initialTargetType ?: "teacher") } // "teacher" or "student"
-    val tabTitles = listOf("Docente", "Estudiante")
+    // Usar string resources para las pestañas
+    val tabTitles = listOf(stringResource(R.string.role_teacher), stringResource(R.string.role_student))
     val selectedTabIndex = if (targetType == "teacher") 0 else 1
 
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -222,12 +222,12 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
             ) {
                 if (targetType == "teacher") {
                     // --- VISTA DOCENTE ---
-                    Text("Asignar grupo a Docente", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
+                    Text(stringResource(R.string.assign_group_teacher_title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
 
                     OutlinedTextField(
                         value = identifier,
                         onValueChange = { identifier = it },
-                        label = { Text("Email o UID del docente") },
+                        label = { Text(stringResource(R.string.email_or_uid_teacher_label)) },
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(8.dp))
@@ -261,7 +261,8 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                                 try {
                                     db.collection("users").document(uid).set(updateData, SetOptions.merge()).await()
                                     db.collection("teachers").document(uid).set(updateData, SetOptions.merge()).await()
-                                    dialogMessage = "Docente asignado correctamente."
+                                    // stringResource es composable; usar context.getString dentro de coroutines
+                                    dialogMessage = context.getString(R.string.teacher_assigned_success)
                                 } catch (e: Exception) {
                                     dialogMessage = "Error al asignar: ${e.message}"
                                 }
@@ -270,17 +271,17 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                             }
                             dialogLoading = false
                         }
-                    }) { Text("Asignar a Docente") }
+                    }) { Text(stringResource(R.string.assign_to_teacher_button)) }
                     Spacer(Modifier.height(16.dp))
                     HorizontalDivider()
                     Spacer(Modifier.height(16.dp))
                     Text("Asignación masiva desde CSV", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 16.dp))
                     Button(onClick = { filePicker.launch(arrayOf("text/csv", "text/plain")) }) {
-                        Text("Importar CSV de Docentes")
+                        Text(stringResource(R.string.import_teachers_csv))
                     }
                     Spacer(Modifier.height(8.dp))
                     Button(onClick = { exportLauncher.launch("docentes.csv") }) {
-                        Text("Exportar plantilla Docentes")
+                        Text(stringResource(R.string.export_teachers_template))
                     }
 
                 } else {

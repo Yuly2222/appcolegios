@@ -160,6 +160,8 @@
     <string name="events_no_events">No hay eventos en este período</string>
     <string name="events_error_permission">No tienes permisos para ver estos eventos. Inicia sesión con la cuenta correcta o contacta al administrador.</string>
     <string name="action_login">Iniciar sesión</string>
+    <string name="ingresando">Ingresando…</string>
+
     <string name="events_item_format">%1$s • %2$s</string>
 
     <!-- Nuevos strings para activity_profile.xml -->
@@ -214,4 +216,13 @@
     <string name="role_label">Rol: %1$s</string>
     <string name="role_na">Rol: N/A</string>
     <string name="course_group_format">%1$s - Grupo %2$s</string>
+
+    <!-- Nuevas cadenas para AssignGroupAdminScreen -->
+    <string name="assign_group_teacher_title">Asignar grupo a Docente</string>
+    <string name="email_or_uid_teacher_label">Email o UID del docente</string>
+    <string name="assign_to_teacher_button">Asignar a Docente</string>
+    <string name="import_teachers_csv">Importar CSV de Docentes</string>
+    <string name="export_teachers_template">Exportar plantilla Docentes</string>
+    <string name="teacher_assigned_success">Docente asignado correctamente.</string>
+    <string name="teacher_found_with_uid">Docente: %1$s (uid=%2$s)</string>
 </resources>
