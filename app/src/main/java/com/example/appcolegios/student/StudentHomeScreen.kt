@@ -68,50 +68,71 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
     val storedUser by userPrefs.userData.collectAsState(initial = UserData(null, null, null))
 
     LaunchedEffect(displayName, storedUser) {
-        // Resolver nombre preferente: 1) displayName param, 2) users/{uid}.name o displayName, 3) FirebaseAuth.currentUser.displayName, 4) userPrefs.name, 5) fallback
-        var nameToUse: String? = displayName?.takeIf { it.isNotBlank() }
+        // Usar el helper central para resolver (y cachear) el nombre, así compartimos la misma lógica que PADRE
+        val auth = FirebaseAuth.getInstance()
         val db = FirebaseFirestore.getInstance()
-        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-        try {
-            val uid = auth.currentUser?.uid
-            if (nameToUse.isNullOrBlank() && !uid.isNullOrBlank()) {
-                try {
-                    val userDoc = db.collection("users").document(uid).get().await()
-                    if (userDoc.exists()) {
-                        nameToUse = userDoc.getString("name") ?: userDoc.getString("displayName")
+        val uid = auth.currentUser?.uid
+
+        // 1) Priorizar displayName explícito (param), luego la preferencia almacenada
+        var resolvedNameNullable: String? = when {
+            !displayName.isNullOrBlank() -> displayName
+            !storedUser.name.isNullOrBlank() -> storedUser.name
+            else -> null
+        }
+
+        // 2) Si aún no tenemos nombre, intentar leer del nodo `students` en Firestore
+        if (resolvedNameNullable.isNullOrBlank()) {
+            try {
+                if (!uid.isNullOrBlank()) {
+                    val studentDoc = db.collection("students").document(uid).get().await()
+                    val sname = studentDoc.getString("name") ?: studentDoc.getString("nombre")
+                    if (!sname.isNullOrBlank()) resolvedNameNullable = sname
+                } else {
+                    val email = auth.currentUser?.email
+                    if (!email.isNullOrBlank()) {
+                        val querySnap = db.collection("students").whereEqualTo("email", email).limit(1).get().await()
+                        if (!querySnap.isEmpty) {
+                            val doc = querySnap.documents.first()
+                            val sname = doc.getString("name") ?: doc.getString("nombre")
+                            if (!sname.isNullOrBlank()) resolvedNameNullable = sname
+                        }
                     }
-                } catch (_: Exception) { /* ignore Firestore name fetch errors */ }
+                }
+            } catch (e: Exception) {
+                // no interrumpimos el flujo por un error de lectura del nombre; simplemente ignoramos y usamos fallback
             }
-            if (nameToUse.isNullOrBlank()) nameToUse = auth.currentUser?.displayName
-        } catch (_: Exception) { /* ignore */ }
-        if (nameToUse.isNullOrBlank()) nameToUse = storedUser.name ?: "Estudiante"
-         // Cargar cursos reales desde Firestore si existe userId
-         // db/auth variables ya inicializadas arriba si es necesario
-         val coursesList = mutableListOf<CourseInfo>()
-         val classesToday = mutableListOf<ClassInfo>()
-         val activities = mutableListOf<ActivityInfo>()
-         try {
-            val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-             if (!uid.isNullOrBlank()) {
-                 val studentDoc = db.collection("students").document(uid).get().await()
-                 val curso = studentDoc.getString("curso") ?: ""
-                 val courseIds = studentDoc.get("courses") as? List<*>
-                 if (!courseIds.isNullOrEmpty()) {
-                     for (cid in courseIds) {
-                         val cdoc = db.collection("courses").document(cid.toString()).get().await()
-                         if (cdoc.exists()) {
-                             val name = cdoc.getString("name") ?: "Curso"
-                             val subject = cdoc.getString("subject") ?: cdoc.getString("materia") ?: ""
-                             val studentsSnap = db.collection("courses").document(cdoc.id).collection("students").get().await()
-                             val count = studentsSnap.size()
-                             coursesList.add(CourseInfo(name, count, subject))
-                         }
-                     }
-                 } else if (curso.isNotBlank()) {
-                     // Preferir usar info real del perfil si existe
-                     coursesList.add(CourseInfo(curso, 0, ""))
-                 }
-                 // TODO: cargar clases y actividades reales si el esquema existe
+        }
+
+        // 3) Finalmente, fallback a displayName del auth o "--" si todavía no hay valor
+        val resolvedName = resolvedNameNullable ?: auth.currentUser?.displayName ?: "--"
+
+        // Cargar cursos reales desde Firestore si existe userId
+        // db/auth variables ya inicializadas arriba si es necesario
+        val coursesList = mutableListOf<CourseInfo>()
+        val classesToday = mutableListOf<ClassInfo>()
+        val activities = mutableListOf<ActivityInfo>()
+        try {
+            // usar la variable `uid` definida arriba (evitar redeclaración que causa shadowing)
+            if (!uid.isNullOrBlank()) {
+                val studentDoc = db.collection("students").document(uid).get().await()
+                val curso = studentDoc.getString("curso") ?: ""
+                val courseIds = studentDoc.get("courses") as? List<*>
+                if (!courseIds.isNullOrEmpty()) {
+                    for (cid in courseIds) {
+                        val cdoc = db.collection("courses").document(cid.toString()).get().await()
+                        if (cdoc.exists()) {
+                            val name = cdoc.getString("name") ?: "Curso"
+                            val subject = cdoc.getString("subject") ?: cdoc.getString("materia") ?: ""
+                            val studentsSnap = db.collection("courses").document(cdoc.id).collection("students").get().await()
+                            val count = studentsSnap.size()
+                            coursesList.add(CourseInfo(name, count, subject))
+                        }
+                    }
+                } else if (curso.isNotBlank()) {
+                    // Preferir usar info real del perfil si existe
+                    coursesList.add(CourseInfo(curso, 0, ""))
+                }
+                // TODO: cargar clases y actividades reales si el esquema existe
              }
          } catch (_: Exception) {
              // ignorar errores de carga
@@ -132,7 +153,7 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
          } catch (_: Exception) { /* ignore and keep empty */ }
 
         state = StudentDashboardState(
-            studentName = nameToUse ?: "Estudiante",
+            studentName = resolvedName,
             enrolledCourses = coursesList,
             todayClasses = classesToday,
             recentActivities = activities,

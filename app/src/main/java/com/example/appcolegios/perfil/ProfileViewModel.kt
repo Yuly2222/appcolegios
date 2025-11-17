@@ -21,7 +21,6 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import android.provider.OpenableColumns
 import com.google.firebase.firestore.SetOptions
 
 // Modelo simple para perfil de docente
@@ -61,6 +60,7 @@ class ProfileViewModel : ViewModel() {
     }
 
     // Devuelve una lista de StorageReference candidatas para un path dado.
+    @Suppress("unused")
     private fun candidateRefs(path: String): List<StorageReference> {
         val refs = mutableListOf<StorageReference>()
         try {
@@ -134,6 +134,8 @@ class ProfileViewModel : ViewModel() {
             _children.value = emptyList()
             _selectedChildIndex.value = null
             _roleString.value = null
+            // limpiar estado relacionado con nombres en memoria si aplica
+
         }
     }
 
@@ -212,40 +214,43 @@ class ProfileViewModel : ViewModel() {
                                 val cursoFromUserRaw = userDoc.getString("curso") ?: userDoc.getString("course")
                                 val grupoFromUserRaw = userDoc.getString("grupo") ?: userDoc.getString("group")
                                 val (cursoNormalized, grupoNormalized) = normalizeCourseKey(cursoFromUserRaw ?: "")
-                                val merged = fallbackFromGrupos.copy(
-                                    curso = if (cursoNormalized.isNotBlank()) cursoNormalized else fallbackFromGrupos.curso,
-                                    grupo = if (grupoNormalized.isNotBlank()) grupoNormalized else (grupoFromUserRaw ?: fallbackFromGrupos.grupo),
-                                    nombre = fallbackFromGrupos.nombre.ifBlank { com.example.appcolegios.util.FirestoreUtils.getPreferredName(userDoc) ?: fallbackFromGrupos.nombre },
-                                    avatarUrl = fallbackFromGrupos.avatarUrl ?: (userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar"))
-                                )
-                                // Si aún no hay curso/grupo, intentar obtenerlos desde users.grupos
-                                if ((merged.curso.isBlank() || merged.grupo.isBlank())) {
-                                    val userGrupos = try { userDoc.get("grupos") as? List<*> } catch (_: Exception) { null }
-                                    if (!userGrupos.isNullOrEmpty()) {
-                                        val first = userGrupos.firstOrNull()?.toString()?.trim() ?: ""
-                                        if (first.isNotBlank()) {
-                                            if (first.contains("-")) {
-                                                val parts = first.split("-")
-                                                val cursoPart = parts.getOrNull(0)?.trim() ?: ""
-                                                val grupoPart = parts.getOrNull(1)?.trim() ?: ""
-                                                val cursoDisplay = if (cursoPart.isNotBlank() && grupoPart.isNotBlank()) "${cursoPart}-${grupoPart.uppercase()}" else first
-                                                merged.copy(curso = cursoDisplay, grupo = grupoPart.uppercase())
-                                            } else {
-                                                merged.copy(curso = first)
-                                            }
-                                        }
-                                    }
-                                }
+                                var merged = fallbackFromGrupos.copy(
+                                     curso = if (cursoNormalized.isNotBlank()) cursoNormalized else fallbackFromGrupos.curso,
+                                     grupo = if (grupoNormalized.isNotBlank()) grupoNormalized else (grupoFromUserRaw ?: fallbackFromGrupos.grupo),
+                                     nombre = fallbackFromGrupos.nombre.ifBlank { com.example.appcolegios.util.FirestoreUtils.getPreferredName(userDoc) ?: fallbackFromGrupos.nombre },
+                                     avatarUrl = fallbackFromGrupos.avatarUrl ?: (userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar"))
+                                 )
+                                 // Si aún no hay curso/grupo, intentar obtenerlos desde users.grupos
+                                 if ((merged.curso.isBlank() || merged.grupo.isBlank())) {
+                                     val userGrupos = try { userDoc.get("grupos") as? List<*> } catch (_: Exception) { null }
+                                     if (!userGrupos.isNullOrEmpty()) {
+                                         val first = userGrupos.firstOrNull()?.toString()?.trim() ?: ""
+                                         if (first.isNotBlank()) {
+                                             if (first.contains("-")) {
+                                                 val parts = first.split("-")
+                                                 val cursoPart = parts.getOrNull(0)?.trim() ?: ""
+                                                 val grupoPart = parts.getOrNull(1)?.trim() ?: ""
+                                                 val cursoDisplay = if (cursoPart.isNotBlank() && grupoPart.isNotBlank()) "${cursoPart}-${grupoPart.uppercase()}" else first
+                                                merged = merged.copy(curso = cursoDisplay, grupo = grupoPart.uppercase())
+                                              merged = merged.copy(curso = cursoDisplay, grupo = grupoPart.uppercase())
+                                             } else {
+                                               merged = merged.copy(curso = first)
+                                                merged = merged.copy(curso = first)
+                                             }
+                                         }
+                                     }
+                                 }
 
-                                Log.d(TAG, "loadStudentData: merged Student from students/$userId + users/$userId -> $merged")
-                                _student.value = Result.success(merged)
-                                return@launch
-                            }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "loadStudentData: error reading users/$userId while merging", e)
-                        }
-                        _student.value = Result.success(fallbackFromGrupos)
-                    } else {
+                                 Log.d(TAG, "loadStudentData: merged Student from students/$userId + users/$userId -> $merged")
+                                 // (previously pre-populábamos una caché de nombres aquí; removido)
+                                  _student.value = Result.success(merged)
+                                  return@launch
+                             }
+                         } catch (e: Exception) {
+                             Log.w(TAG, "loadStudentData: error reading users/$userId while merging", e)
+                         }
+                         _student.value = Result.success(fallbackFromGrupos)
+                     } else {
                         Log.d(TAG, "loadStudentData: students/$userId not found, trying users/$userId")
                         // Intentar leer desde users/{uid} cuando no exista students/{uid}
                         try {

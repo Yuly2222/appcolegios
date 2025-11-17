@@ -224,10 +224,9 @@ fun TasksScreen() {
                         loaded.add(CourseSimple(id, name, studs))
                     }
                 }
+                // Si no se encontraron cursos reales, la lista queda vacía (sin curso demo).
             }
-            if (loaded.isEmpty()) {
-                loaded.add(CourseSimple("c1","Demo Curso", listOf(StudentSimple("s1","Alumno A"), StudentSimple("s2","Alumno B"))))
-            }
+            // Si no se encontraron cursos reales, no añadimos datos de demo: la lista queda vacía y se poblará desde Firebase.
             courses = loaded
         } catch (e: Exception) {
             errorMsg = "Error cargando cursos: ${e.localizedMessage}"
@@ -267,9 +266,7 @@ fun TasksScreen() {
                     }
                 }
             }
-            if (loaded.isEmpty()) {
-                loaded.add(CourseSimple("c1","Demo Curso", listOf(StudentSimple("s1","Alumno A"), StudentSimple("s2","Alumno B"))))
-            }
+            // Si no se encontraron cursos reales, la lista queda vacía (sin curso demo).
             courses = loaded
             selectedCourse = null
         } catch (_: Exception) {

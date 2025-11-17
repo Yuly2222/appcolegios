@@ -66,10 +66,8 @@ fun GradingScreen() {
                     }
                 }
             }
-            if (loaded.isEmpty()) {
-                loaded.add(CourseSimple("c1","Demo Curso", listOf(StudentSimple("s1","Alumno A"), StudentSimple("s2","Alumno B"))))
-            }
-            courses = loaded
+            // Si no se encontraron cursos reales, devolvemos la lista vacía. Rellenar desde Firebase.
+             courses = loaded
         } catch (e: Exception) {
             errorMsg = "Error cargando cursos: ${e.localizedMessage}"
         } finally {

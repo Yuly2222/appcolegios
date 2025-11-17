@@ -16,8 +16,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.util.Locale
 import androidx.compose.ui.platform.LocalContext
-import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.appcolegios.data.UserPreferencesRepository
 import com.example.appcolegios.perfil.ProfileViewModel
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.auth.FirebaseAuth
@@ -52,6 +52,9 @@ fun NotesScreen() {
 
     val auth = FirebaseAuth.getInstance()
     val db = FirebaseFirestore.getInstance()
+
+    // Nombre resuelto que se mostrará en el header (resolver con jerarquía)
+    var resolvedName by remember { mutableStateOf<String?>(null) }
 
     // seleccionar primer hijo automáticamente si existe
     LaunchedEffect(children) {
@@ -88,6 +91,18 @@ fun NotesScreen() {
         }
     }
 
+    // Resolver nombre cuando cambian la selección, hijos o preferencias
+    LaunchedEffect(selectedChildIndex, children, userData) {
+        val candidateChild = children.getOrNull(selectedChildIndex)
+        val candidateName = candidateChild?.nombre
+        // Priorizar nombre del student; si no existe, usar el name almacenado en preferencias o el displayName del auth
+        resolvedName = when {
+            !candidateName.isNullOrBlank() -> candidateName
+            !userData.name.isNullOrBlank() -> userData.name
+            else -> auth.currentUser?.displayName ?: "--"
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -112,7 +127,7 @@ fun NotesScreen() {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        currentChild?.nombre ?: auth.currentUser?.displayName ?: "--",
+                        resolvedName ?: "--",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
