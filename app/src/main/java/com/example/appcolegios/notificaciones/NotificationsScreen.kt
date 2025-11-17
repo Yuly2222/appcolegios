@@ -23,7 +23,6 @@ import com.example.appcolegios.R
 import com.example.appcolegios.data.model.Notification
 import com.example.appcolegios.util.DateFormats
 import kotlinx.coroutines.launch
-import com.example.appcolegios.demo.DemoData
 import androidx.navigation.NavController
 
 @Composable
@@ -69,8 +68,8 @@ fun NotificationsScreen(notificationsViewModel: NotificationsViewModel = viewMod
                         ) { Text(stringResource(R.string.error_label) + ": " + (uiState.error ?: ""), color = MaterialTheme.colorScheme.error) }
                     }
                     else -> {
-                        val isDemo = DemoData.isDemoUser()
-                        val dataToShow = if (uiState.notifications.isEmpty() && isDemo) DemoData.demoNotifications() else uiState.notifications
+                        // Mostrar siempre las notificaciones reales traídas desde Firestore; no usar datos demo estáticos
+                        val dataToShow = uiState.notifications
                         if (dataToShow.isEmpty()) {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
