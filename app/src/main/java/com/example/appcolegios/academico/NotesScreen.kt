@@ -5,8 +5,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.automirrored.filled.Comment
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,14 +36,14 @@ data class Grade(
 fun NotesScreen() {
     // Usar ProfileViewModel para obtener hijos reales y determinar si es PADRE
     val profileVm: ProfileViewModel = viewModel()
-    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
+    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState(initial = emptyList())
     val context = LocalContext.current
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val isStudent = (userData.role ?: "").equals("ESTUDIANTE", ignoreCase = true)
 
     // Usar el índice seleccionado centralizado en ProfileViewModel para evitar parpadeos
-    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState()
+    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState(initial = null)
     val selectedChildIndex = selectedIndexState ?: 0
     var showSelectChildDialog by remember { mutableStateOf(false) }
 

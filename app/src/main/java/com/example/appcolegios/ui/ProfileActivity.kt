@@ -23,7 +23,7 @@ import com.example.appcolegios.perfil.ProfileViewModel
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import kotlinx.coroutines.flow.collectLatest
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.util.*
@@ -56,6 +56,7 @@ class ProfileActivity : AppCompatActivity() {
 
     private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val storage = FirebaseStorage.getInstance()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,16 +67,8 @@ class ProfileActivity : AppCompatActivity() {
         // Registrar el launcher aquí, una vez que profileVm está inicializado
         pickImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
             uri?.let {
-                profileVm.uploadStudentPhotoAsBase64WithResolver(contentResolver, it) { dataUri, error ->
-                    runOnUiThread {
-                        if (!dataUri.isNullOrBlank()) {
-                            Toast.makeText(this@ProfileActivity, getString(R.string.profile_image_updated), Toast.LENGTH_SHORT).show()
-                            profileVm.refreshAllData()
-                        } else {
-                            Toast.makeText(this@ProfileActivity, error ?: getString(R.string.error_subiendo_imagen), Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
+                // Subir la imagen a Firebase Storage y guardar sólo la URL en Firestore
+                uploadImageAndSave(it)
             }
         }
 
@@ -92,16 +85,68 @@ class ProfileActivity : AppCompatActivity() {
         }
     }
 
+    private fun uploadImageAndSave(uri: Uri) {
+        lifecycleScope.launch {
+            val uid = auth.currentUser?.uid
+            if (uid.isNullOrBlank()) {
+                Toast.makeText(this@ProfileActivity, getString(R.string.must_be_logged_in), Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+
+            try {
+                progressBar.visibility = View.VISIBLE
+
+                val ts = System.currentTimeMillis()
+                val ref = storage.reference.child("profile_images/$uid-$ts.jpg")
+
+                // Abrir stream y subir
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    ref.putStream(stream).await()
+                }
+
+                // Obtener URL pública
+                val downloadUrl = ref.downloadUrl.await().toString()
+
+                // Guardar sólo la URL en users/{uid} y students/{uid} (si existe)
+                val userDoc = db.collection("users").document(uid)
+                val updateUser = mapOf("photoUrl" to downloadUrl, "updatedAt" to com.google.firebase.Timestamp.now())
+                val safeUser = sanitizeForFirestore(updateUser)
+                userDoc.set(safeUser, SetOptions.merge()).await()
+
+                // Intentar guardar avatarUrl en students/{uid} si existe
+                try {
+                    val studentDocRef = db.collection("students").document(uid)
+                    val studentDoc = studentDocRef.get().await()
+                    if (studentDoc.exists()) {
+                        val updateStudent = mapOf("avatarUrl" to downloadUrl)
+                        val safeStudent = sanitizeForFirestore(updateStudent)
+                        studentDocRef.set(safeStudent, SetOptions.merge()).await()
+                    }
+                } catch (_: Exception) {
+                    // ignore student write failures but still proceed
+                }
+
+                Toast.makeText(this@ProfileActivity, getString(R.string.profile_image_updated), Toast.LENGTH_SHORT).show()
+                profileVm.refreshAllData()
+            } catch (e: Exception) {
+                Toast.makeText(this@ProfileActivity, getString(R.string.error_subiendo_imagen) + ": " + (e.localizedMessage ?: ""), Toast.LENGTH_LONG).show()
+            } finally {
+                progressBar.visibility = View.GONE
+            }
+        }
+    }
+
     private fun initViews() {
-        progressBar = findViewById(R.id.progressBar) ?: ProgressBar(this).apply { visibility = View.GONE }
-        profileImage = findViewById(R.id.profileImage)
-        nameText = findViewById(R.id.nameText)
-        courseText = findViewById(R.id.courseText)
-        listNumberText = findViewById(R.id.listNumberText)
-        emailText = findViewById(R.id.emailText)
-        roleText = findViewById(R.id.roleText)
-        averageText = findViewById(R.id.averageText)
-        academicInfoButton = findViewById(R.id.academicInfoButton)
+        // findViewById devuelve la vista o null, pero las propiedades son lateinit; lanzar excepción si no existe layout esperado
+        progressBar = findViewById(R.id.progressBar) ?: throw IllegalStateException("progressBar not found in layout")
+        profileImage = findViewById(R.id.profileImage) ?: throw IllegalStateException("profileImage not found in layout")
+        nameText = findViewById(R.id.nameText) ?: throw IllegalStateException("nameText not found in layout")
+        courseText = findViewById(R.id.courseText) ?: throw IllegalStateException("courseText not found in layout")
+        listNumberText = findViewById(R.id.listNumberText) ?: throw IllegalStateException("listNumberText not found in layout")
+        emailText = findViewById(R.id.emailText) ?: throw IllegalStateException("emailText not found in layout")
+        roleText = findViewById(R.id.roleText) ?: throw IllegalStateException("roleText not found in layout")
+        averageText = findViewById(R.id.averageText) ?: throw IllegalStateException("averageText not found in layout")
+        academicInfoButton = findViewById(R.id.academicInfoButton) ?: throw IllegalStateException("academicInfoButton not found in layout")
 
         parentCard = findViewById(R.id.parentCard)
         parentChildText = findViewById(R.id.parentChildText)
@@ -114,7 +159,7 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun setupObservers() {
         lifecycleScope.launch {
-            profileVm.student.collectLatest { result ->
+            profileVm.student.collect { result ->
                 progressBar.visibility = View.GONE
                 result?.onSuccess { student ->
                     if (student != null) {
@@ -129,12 +174,14 @@ class ProfileActivity : AppCompatActivity() {
         }
 
         lifecycleScope.launch {
-            profileVm.roleString.collectLatest { role ->
+            profileVm.roleString.collect { role ->
                 roleText.text = getString(R.string.role_label, role?.uppercase() ?: "N/A")
 
                 val isAdmin = role.equals("ADMIN", ignoreCase = true)
                 // Mostrar u ocultar tarjeta académica para ADMIN
                 findViewById<View>(R.id.academicCard)?.visibility = if (isAdmin) View.GONE else View.VISIBLE
+
+                // admin migration UI omitted
 
                 // Si es PADRE: ocultar vista académica y mostrar parentCard
                 if (role.equals("PADRE", ignoreCase = true)) {
@@ -177,7 +224,7 @@ class ProfileActivity : AppCompatActivity() {
 
         // Observador de hijos para actualizar el selector
         lifecycleScope.launch {
-            profileVm.children.collectLatest { list ->
+            profileVm.children.collect { list ->
                 if (list.isEmpty()) {
                     parentChildText.text = getString(R.string.no_children)
                     selectChildButton.isEnabled = false
@@ -350,13 +397,18 @@ class ProfileActivity : AppCompatActivity() {
 
     private fun updateUi(student: com.example.appcolegios.data.model.Student) {
         nameText.text = student.nombre.ifBlank { getString(R.string.no_student_data) }
-        courseText.text = getString(R.string.course_group_format, student.curso.ifBlank { "N/A" }, student.grupo.ifBlank { "N/A" })
+        // Mostrar curso y grupo en formato "Curso - GRUPO"
+        val cursoDisplay = if (student.curso.isNotBlank()) student.curso else "N/A"
+        val grupoDisplay = if (student.grupo.isNotBlank()) student.grupo else "N/A"
+        courseText.text = getString(R.string.course_group_format, cursoDisplay, grupoDisplay)
         listNumberText.text = if (student.numeroLista > 0) student.numeroLista.toString() else "N/A"
         emailText.text = student.correoInstitucional.ifBlank { "N/A" }
         averageText.text = if (student.promedio > 0.0) String.format(Locale.getDefault(), "%.2f", student.promedio) else "N/A"
 
-        if (!student.photoUrl.isNullOrBlank()) {
-            profileImage.load(student.photoUrl) {
+        // Usar avatarUrl (ProfileViewModel escribe avatarUrl/avatar) como fuente prioritaria
+        val avatar = student.avatarUrl ?: student.photoUrl
+        if (!avatar.isNullOrBlank()) {
+            profileImage.load(avatar) {
                 crossfade(true)
                 placeholder(R.drawable.ic_launcher_foreground)
             }
@@ -377,5 +429,19 @@ class ProfileActivity : AppCompatActivity() {
     private fun showErrorState(message: String?) {
         nameText.text = getString(R.string.error_cargando_datos)
         Toast.makeText(this@ProfileActivity, message ?: getString(R.string.error_generic), Toast.LENGTH_LONG).show()
+    }
+
+    // Small helper to avoid writing large strings or base64 blobs into Firestore documents
+    private fun sanitizeForFirestore(fields: Map<String, Any?>): Map<String, Any?> {
+        val out = mutableMapOf<String, Any?>()
+        val MAX_LEN = 200_000
+        for ((k, v) in fields) {
+            if (k.contains("base64", ignoreCase = true) || k.contains("data:image", ignoreCase = true)) continue
+            if (v is String) {
+                if (v.length > MAX_LEN) continue
+            }
+            out[k] = v
+        }
+        return out
     }
 }

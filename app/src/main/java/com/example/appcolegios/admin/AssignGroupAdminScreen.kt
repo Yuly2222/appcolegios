@@ -26,6 +26,7 @@ import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import androidx.compose.ui.res.stringResource
 import com.example.appcolegios.R
+import com.example.appcolegios.data.FirestoreRepository
 
 /**
  * Pantalla que reemplaza al antiguo AssignGroupDialog.
@@ -36,6 +37,7 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { FirebaseFirestore.getInstance() }
+    val repo = remember { FirestoreRepository() }
 
     var identifier by remember { mutableStateOf(initialIdentifier ?: "") }
     var curso by remember { mutableStateOf("") }
@@ -251,17 +253,12 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                             val uid = AdminHelpers.findUidByIdentifier(db, identifier)
                             if (uid != null) {
                                 val groupKey = if (curso.isNotBlank() && grupo.isNotBlank()) (curso.trim() + "-" + grupo.trim()).lowercase() else ""
-                                val updateData = mutableMapOf<String, Any>("role" to "DOCENTE")
-                                if (groupKey.isNotBlank()) {
-                                    updateData["groupKey"] = groupKey
-                                    updateData["curso"] = curso.trim()
-                                    updateData["grupo"] = grupo.trim()
-                                    updateData["grupos"] = FieldValue.arrayUnion(groupKey)
-                                }
                                 try {
-                                    db.collection("users").document(uid).set(updateData, SetOptions.merge()).await()
-                                    db.collection("teachers").document(uid).set(updateData, SetOptions.merge()).await()
-                                    // stringResource es composable; usar context.getString dentro de coroutines
+                                    // Update users and teacher docs via repo
+                                    repo.createOrUpdateUser(uid, identifier, "", "TEACHER", groupId = if (groupKey.isNotBlank()) groupKey else null)
+                                    // ensure teacher doc exists and groups updated
+                                    repo.createOrUpdateTeacherDocument(uid, identifier, groups = if (groupKey.isNotBlank()) listOf(groupKey) else emptyList())
+                                    if (groupKey.isNotBlank()) repo.ensureGroupExistsPublic(groupKey, mapOf("name" to "${curso.trim()} - ${grupo.trim()}"))
                                     dialogMessage = context.getString(R.string.teacher_assigned_success)
                                 } catch (e: Exception) {
                                     dialogMessage = "Error al asignar: ${e.message}"
@@ -319,24 +316,12 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                             val uid = AdminHelpers.findUidByIdentifier(db, identifier)
                             if (uid != null) {
                                 val groupKey = "${curso.trim()}-${grupo.trim()}".lowercase()
-                                val studentUpdate = mapOf(
-                                    "curso" to curso.trim(),
-                                    "grupo" to grupo.trim(),
-                                    "groupKey" to groupKey,
-                                    "grupos" to FieldValue.arrayUnion(groupKey)
-                                )
-                                val userUpdate = mapOf(
-                                    "role" to "ESTUDIANTE",
-                                    "curso" to curso.trim(),
-                                    "grupo" to grupo.trim(),
-                                    "groupKey" to groupKey,
-                                    "grupos" to FieldValue.arrayUnion(groupKey)
-                                )
                                 try {
-                                    db.collection("students").document(uid).set(studentUpdate, SetOptions.merge()).await()
-                                    db.collection("users").document(uid).set(userUpdate, SetOptions.merge()).await()
-                                    val groupDocRef = db.collection("groups").document(groupKey)
-                                    groupDocRef.set(mapOf("name" to "${curso.trim()} - ${grupo.trim()}", "curso" to curso.trim(), "grupo" to grupo.trim()), SetOptions.merge()).await()
+                                    // Ensure group exists
+                                    repo.ensureGroupExistsPublic(groupKey, mapOf("name" to "${curso.trim()} - ${grupo.trim()}"))
+                                    // Update student and user docs
+                                    repo.createOrUpdateStudentDocument(uid, identifier, groupKey)
+                                    repo.createOrUpdateUser(uid, identifier, identifier, "STUDENT", groupId = groupKey)
                                     dialogMessage = "Estudiante asignado al grupo '$groupKey' correctamente."
                                 } catch (e: Exception) {
                                     dialogMessage = "Error al asignar: ${e.message}"

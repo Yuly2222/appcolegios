@@ -2,11 +2,10 @@ package com.example.appcolegios.dashboard
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.appcolegios.data.FirestoreRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 data class DashboardState(
     val loading: Boolean = true,
@@ -18,7 +17,7 @@ data class DashboardState(
 )
 
 class DashboardViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
+    private val repo = FirestoreRepository()
 
     private val _state = MutableStateFlow(DashboardState())
     val state: StateFlow<DashboardState> = _state
@@ -29,17 +28,17 @@ class DashboardViewModel : ViewModel() {
         _state.value = _state.value.copy(loading = true, error = null)
         viewModelScope.launch {
             try {
-                val usersSnap = db.collection("users").get().await()
-                val studentsSnap = db.collection("students").get().await()
-                val teachersSnap = db.collection("teachers").get().await()
-                val groupsSnap = db.collection("groups").get().await()
+                val usersCount = repo.countCollectionDocuments("users")
+                val studentsCount = repo.countCollectionDocuments("students")
+                val teachersCount = repo.countCollectionDocuments("teachers")
+                val groupsCount = repo.countCollectionDocuments("groups")
 
                 _state.value = DashboardState(
                     loading = false,
-                    usersCount = usersSnap.size(),
-                    studentsCount = studentsSnap.size(),
-                    teachersCount = teachersSnap.size(),
-                    groupsCount = groupsSnap.size()
+                    usersCount = usersCount,
+                    studentsCount = studentsCount,
+                    teachersCount = teachersCount,
+                    groupsCount = groupsCount
                 )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(loading = false, error = e.message)

@@ -18,9 +18,8 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.appcolegios.data.UserPreferencesRepository
 import androidx.compose.runtime.collectAsState
 import com.example.appcolegios.data.UserData
-import kotlinx.coroutines.tasks.await
+import com.example.appcolegios.data.FirestoreRepository
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 
 // Estado simplificado para el dashboard de estudiante
 data class StudentDashboardState(
@@ -66,11 +65,11 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
     val context = LocalContext.current
     val userPrefs = remember { UserPreferencesRepository(context) }
     val storedUser by userPrefs.userData.collectAsState(initial = UserData(null, null, null))
+    val repo = remember { FirestoreRepository() }
 
     LaunchedEffect(displayName, storedUser) {
         // Usar el helper central para resolver (y cachear) el nombre, así compartimos la misma lógica que PADRE
         val auth = FirebaseAuth.getInstance()
-        val db = FirebaseFirestore.getInstance()
         val uid = auth.currentUser?.uid
 
         // 1) Priorizar displayName explícito (param), luego la preferencia almacenada
@@ -84,21 +83,21 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
         if (resolvedNameNullable.isNullOrBlank()) {
             try {
                 if (!uid.isNullOrBlank()) {
-                    val studentDoc = db.collection("students").document(uid).get().await()
-                    val sname = studentDoc.getString("name") ?: studentDoc.getString("nombre")
+                    val studentDoc = repo.getDocumentData("students", uid)
+                    val sname = studentDoc?.get("fullName") as? String ?: studentDoc?.get("name") as? String ?: studentDoc?.get("nombre") as? String
                     if (!sname.isNullOrBlank()) resolvedNameNullable = sname
                 } else {
                     val email = auth.currentUser?.email
                     if (!email.isNullOrBlank()) {
-                        val querySnap = db.collection("students").whereEqualTo("email", email).limit(1).get().await()
-                        if (!querySnap.isEmpty) {
-                            val doc = querySnap.documents.first()
-                            val sname = doc.getString("name") ?: doc.getString("nombre")
+                        val q = repo.queryWhereEqual("students", "email", email)
+                        if (q.isNotEmpty()) {
+                            val doc = q[0]
+                            val sname = doc["fullName"] as? String ?: doc["name"] as? String ?: doc["nombre"] as? String
                             if (!sname.isNullOrBlank()) resolvedNameNullable = sname
                         }
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // no interrumpimos el flujo por un error de lectura del nombre; simplemente ignoramos y usamos fallback
             }
         }
@@ -112,45 +111,41 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
         val classesToday = mutableListOf<ClassInfo>()
         val activities = mutableListOf<ActivityInfo>()
         try {
-            // usar la variable `uid` definida arriba (evitar redeclaración que causa shadowing)
             if (!uid.isNullOrBlank()) {
-                val studentDoc = db.collection("students").document(uid).get().await()
-                val curso = studentDoc.getString("curso") ?: ""
-                val courseIds = studentDoc.get("courses") as? List<*>
+                val studentDoc = repo.getDocumentData("students", uid)
+                val curso = studentDoc?.get("curso") as? String ?: studentDoc?.get("groupId") as? String ?: ""
+                val courseIds = (studentDoc?.get("courses") as? List<*>) ?: (studentDoc?.get("groups") as? List<*>)
                 if (!courseIds.isNullOrEmpty()) {
                     for (cid in courseIds) {
-                        val cdoc = db.collection("courses").document(cid.toString()).get().await()
-                        if (cdoc.exists()) {
-                            val name = cdoc.getString("name") ?: "Curso"
-                            val subject = cdoc.getString("subject") ?: cdoc.getString("materia") ?: ""
-                            val studentsSnap = db.collection("courses").document(cdoc.id).collection("students").get().await()
-                            val count = studentsSnap.size()
+                        val cIdStr = cid.toString()
+                        val cdoc = repo.getDocumentData("courses", cIdStr)
+                        if (cdoc != null) {
+                            val name = cdoc["name"] as? String ?: "Curso"
+                            val subject = cdoc["subject"] as? String ?: cdoc["materia"] as? String ?: ""
+                            val studentsSnap = repo.getSubcollectionDocuments("courses", cIdStr, "students")
+                            val count = studentsSnap.size
                             coursesList.add(CourseInfo(name, count, subject))
                         }
                     }
                 } else if (curso.isNotBlank()) {
-                    // Preferir usar info real del perfil si existe
                     coursesList.add(CourseInfo(curso, 0, ""))
                 }
-                // TODO: cargar clases y actividades reales si el esquema existe
-             }
-         } catch (_: Exception) {
-             // ignorar errores de carga
-         }
+            }
+        } catch (_: Exception) {
+            // ignorar errores de carga
+        }
 
-         // Cargar acciones rápidas desde Firestore: colección 'home_actions', campo 'role' == 'student'
-         val actions = mutableListOf<HomeAction>()
-         try {
-             val actionsSnap = db.collection("home_actions").whereEqualTo("role", "student").get().await()
-             if (actionsSnap != null && !actionsSnap.isEmpty) {
-                 for (doc in actionsSnap.documents) {
-                     val label = doc.getString("label") ?: continue
-                     val route = doc.getString("route") ?: continue
-                     val iconKey = doc.getString("iconKey")
-                     actions.add(HomeAction(label = label, route = route, iconKey = iconKey))
-                 }
-             }
-         } catch (_: Exception) { /* ignore and keep empty */ }
+        // Cargar acciones rápidas desde Firestore: colección 'home_actions', campo 'role' == 'student'
+        val actions = mutableListOf<HomeAction>()
+        try {
+            val actionsDocs = repo.queryWhereEqual("home_actions", "role", "student")
+            for (doc in actionsDocs) {
+                val label = doc["label"] as? String ?: continue
+                val route = doc["route"] as? String ?: continue
+                val iconKey = doc["iconKey"] as? String
+                actions.add(HomeAction(label = label, route = route, iconKey = iconKey))
+            }
+        } catch (_: Exception) { /* ignore and keep empty */ }
 
         state = StudentDashboardState(
             studentName = resolvedName,

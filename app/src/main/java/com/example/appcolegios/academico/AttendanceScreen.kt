@@ -52,7 +52,7 @@ fun AttendanceScreen() {
     val role = userData.role ?: ""
     // Perfil VM para obtener hijos cuando el usuario es padre
     val profileVm: ProfileViewModel = viewModel()
-    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
+    val children by profileVm.children.collectAsState(initial = emptyList())
     val isParent = (userData.role ?: "").equals("PARENT", ignoreCase = true) || (userData.role ?: "").equals("PADRE", ignoreCase = true)
 
     // Estado local para selección de hijo

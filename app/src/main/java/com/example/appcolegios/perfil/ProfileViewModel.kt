@@ -4,15 +4,14 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.appcolegios.data.model.Student
+import com.example.appcolegios.data.FirestoreRepository
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
 import android.net.Uri
 import android.content.ContentResolver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import com.google.firebase.storage.StorageReference
 import com.google.firebase.FirebaseApp
 import android.graphics.Bitmap
@@ -35,7 +34,7 @@ class ProfileViewModel : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
     }
-    private val db = FirebaseFirestore.getInstance()
+    private val repo = FirestoreRepository()
     private val auth = FirebaseAuth.getInstance()
     private val storage = run {
         try {
@@ -175,25 +174,28 @@ class ProfileViewModel : ViewModel() {
             val userId = auth.currentUser?.uid
             if (userId != null) {
                 try {
-                    val studentDocSnap = db.collection("students").document(userId).get().await()
-                    if (studentDocSnap.exists()) {
+                    val studentMap = repo.getDocumentData("students", userId)
+                    if (studentMap != null) {
                         Log.d(TAG, "loadStudentData: found students/$userId")
                         // Mapear manualmente para soportar campos 'nombre' o 'name'
-                        val rawCurso = studentDocSnap.getString("curso") ?: studentDocSnap.getString("course") ?: ""
-                        val rawGrupo = studentDocSnap.getString("grupo") ?: studentDocSnap.getString("group") ?: ""
+                        val rawCurso = studentMap["curso"] as? String ?: (studentMap["course"] as? String ?: "")
+                        val rawGrupo = studentMap["grupo"] as? String ?: (studentMap["group"] as? String ?: "")
                         val (cursoFromRaw, grupoFromRaw) = normalizeCourseKey(rawCurso)
 
+                        val preferredName = (studentMap["nombre"] as? String) ?: (studentMap["name"] as? String) ?: (studentMap["displayName"] as? String)
+                        val promedioVal = try { (studentMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
+                        val avatarVal = studentMap["avatarUrl"] as? String ?: studentMap["photoUrl"] as? String ?: studentMap["avatar"] as? String
                         val studentData = Student(
                             id = userId,
-                            nombre = com.example.appcolegios.util.FirestoreUtils.getPreferredName(studentDocSnap) ?: "",
-                            curso = if (cursoFromRaw.isNotBlank()) cursoFromRaw else studentDocSnap.getString("curso") ?: studentDocSnap.getString("course") ?: "",
+                            nombre = preferredName ?: "",
+                            curso = if (cursoFromRaw.isNotBlank()) cursoFromRaw else (studentMap["curso"] as? String ?: studentMap["course"] as? String ?: ""),
                             grupo = if (grupoFromRaw.isNotBlank()) grupoFromRaw else rawGrupo,
-                            promedio = try { (studentDocSnap.getDouble("promedio") ?: studentDocSnap.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 },
-                            avatarUrl = studentDocSnap.getString("avatarUrl") ?: studentDocSnap.getString("photoUrl") ?: studentDocSnap.getString("avatar")
+                            promedio = promedioVal,
+                            avatarUrl = avatarVal
                         )
 
                         // Si no hay curso/grupo explícitos, intentar desde el array 'grupos' (compatibilidad con AssignGroupAdminScreen)
-                        val gruposArray = try { studentDocSnap.get("grupos") as? List<*> } catch (_: Exception) { null }
+                        val gruposArray = try { studentMap["grupos"] as? List<*> } catch (_: Exception) { null }
                         val fallbackFromGrupos = if ((studentData.curso.isBlank() || studentData.grupo.isBlank()) && !gruposArray.isNullOrEmpty()) {
                             val first = gruposArray.firstOrNull()?.toString()?.trim() ?: ""
                             if (first.contains("-")) {
@@ -209,20 +211,20 @@ class ProfileViewModel : ViewModel() {
 
                         // Intentar leer users/{uid} para completar/actualizar curso/grupo si existen allí
                         try {
-                            val userDoc = db.collection("users").document(userId).get().await()
-                            if (userDoc.exists()) {
-                                val cursoFromUserRaw = userDoc.getString("curso") ?: userDoc.getString("course")
-                                val grupoFromUserRaw = userDoc.getString("grupo") ?: userDoc.getString("group")
+                            val userDocMap = repo.getDocumentData("users", userId)
+                            if (userDocMap != null) {
+                                val cursoFromUserRaw = userDocMap["curso"] as? String ?: userDocMap["course"] as? String
+                                val grupoFromUserRaw = userDocMap["grupo"] as? String ?: userDocMap["group"] as? String
                                 val (cursoNormalized, grupoNormalized) = normalizeCourseKey(cursoFromUserRaw ?: "")
                                 var merged = fallbackFromGrupos.copy(
                                      curso = if (cursoNormalized.isNotBlank()) cursoNormalized else fallbackFromGrupos.curso,
                                      grupo = if (grupoNormalized.isNotBlank()) grupoNormalized else (grupoFromUserRaw ?: fallbackFromGrupos.grupo),
-                                     nombre = fallbackFromGrupos.nombre.ifBlank { com.example.appcolegios.util.FirestoreUtils.getPreferredName(userDoc) ?: fallbackFromGrupos.nombre },
-                                     avatarUrl = fallbackFromGrupos.avatarUrl ?: (userDoc.getString("avatarUrl") ?: userDoc.getString("photoUrl") ?: userDoc.getString("avatar"))
+                                     nombre = fallbackFromGrupos.nombre.ifBlank { (userDocMap["fullName"] as? String) ?: fallbackFromGrupos.nombre },
+                                     avatarUrl = fallbackFromGrupos.avatarUrl ?: (userDocMap["avatarUrl"] as? String ?: userDocMap["photoUrl"] as? String ?: userDocMap["avatar"] as? String)
                                  )
                                  // Si aún no hay curso/grupo, intentar obtenerlos desde users.grupos
                                  if ((merged.curso.isBlank() || merged.grupo.isBlank())) {
-                                     val userGrupos = try { userDoc.get("grupos") as? List<*> } catch (_: Exception) { null }
+                                     val userGrupos = try { userDocMap["grupos"] as? List<*> } catch (_: Exception) { null }
                                      if (!userGrupos.isNullOrEmpty()) {
                                          val first = userGrupos.firstOrNull()?.toString()?.trim() ?: ""
                                          if (first.isNotBlank()) {
@@ -242,13 +244,12 @@ class ProfileViewModel : ViewModel() {
                                  }
 
                                  Log.d(TAG, "loadStudentData: merged Student from students/$userId + users/$userId -> $merged")
-                                 // (previously pre-populábamos una caché de nombres aquí; removido)
-                                  _student.value = Result.success(merged)
-                                  return@launch
-                             }
-                         } catch (e: Exception) {
-                             Log.w(TAG, "loadStudentData: error reading users/$userId while merging", e)
-                         }
+                                 _student.value = Result.success(merged)
+                                 return@launch
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "loadStudentData: error reading users/$userId while merging", e)
+                        }
                          _student.value = Result.success(fallbackFromGrupos)
                      } else {
                         // students/$userId no existe: no poblar _student con datos de users/{userId}
@@ -271,31 +272,31 @@ class ProfileViewModel : ViewModel() {
                 return@launch
             }
             try {
-                val doc = db.collection("teachers").document(userId).get().await()
-                if (doc.exists()) {
-                    val nombre = com.example.appcolegios.util.FirestoreUtils.getPreferredName(doc)
-                    val email = doc.getString("email") ?: auth.currentUser?.email
-                    val phone = doc.getString("phone")
-                    val photoBase64 = doc.getString("photoBase64")
+                val teacherMap = repo.getDocumentData("teachers", userId)
+                if (teacherMap != null) {
+                    val nombre = teacherMap["fullName"] as? String ?: teacherMap["name"] as? String
+                    val email = teacherMap["email"] as? String ?: auth.currentUser?.email
+                    val phone = teacherMap["phone"] as? String
+                    val photoBase64 = teacherMap["photoBase64"] as? String
                     val photo = if (!photoBase64.isNullOrBlank()) {
                         "data:image/jpeg;base64,$photoBase64"
                     } else {
-                        doc.getString("photoUrl") ?: doc.getString("avatar")
+                        teacherMap["photoUrl"] as? String ?: teacherMap["avatar"] as? String
                     }
                     _teacherState.value = Result.success(TeacherProfile(nombre, email, phone, photo))
                     return@launch
                 }
 
-                val userDoc = db.collection("users").document(userId).get().await()
-                if (userDoc.exists()) {
-                    val nombre = userDoc.getString("displayName") ?: userDoc.getString("name")
-                    val email = userDoc.getString("email") ?: auth.currentUser?.email
-                    val phone = userDoc.getString("phone")
-                    val photoBase64 = userDoc.getString("photoBase64")
+                val userDocMap = repo.getDocumentData("users", userId)
+                if (userDocMap != null) {
+                    val nombre = userDocMap["displayName"] as? String ?: userDocMap["name"] as? String
+                    val email = userDocMap["email"] as? String ?: auth.currentUser?.email
+                    val phone = userDocMap["phone"] as? String
+                    val photoBase64 = userDocMap["photoBase64"] as? String
                     val photo = if (!photoBase64.isNullOrBlank()) {
                         "data:image/jpeg;base64,$photoBase64"
                     } else {
-                        userDoc.getString("photoUrl") ?: userDoc.getString("avatar")
+                        userDocMap["photoUrl"] as? String ?: userDocMap["avatar"] as? String
                     }
                     _teacherState.value = Result.success(TeacherProfile(nombre, email, phone, photo))
                     return@launch
@@ -320,21 +321,16 @@ class ProfileViewModel : ViewModel() {
                 // 1) Buscar en students colección por array 'parents' que contenga userId
                 if (!userId.isNullOrBlank()) {
                     try {
-                        val qParents = db.collection("students").whereArrayContains("parents", userId).get().await()
-                        for (doc in qParents.documents) {
-                            // Mapear manualmente para aceptar 'nombre' o 'name'
-                            val id = doc.id
-                            val name = doc.getString("nombre") ?: doc.getString("name") ?: doc.getString("displayName") ?: ""
-                            val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
-                            val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
-                            val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
-                            val avatarBase64 = doc.getString("avatarBase64")
-                            val avatar = when {
-                                !rawAvatar.isNullOrBlank() -> rawAvatar
-                                !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
-                                else -> null
-                            }
-                            val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                        val studentsWithParent = repo.queryWhereArrayContains("students", "parents", userId)
+                        for (docMap in studentsWithParent) {
+                            val id = docMap["__id"] as? String ?: continue
+                            val name = docMap["nombre"] as? String ?: docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                            val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
+                            val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
+                            val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
+                            val avatarBase64 = docMap["avatarBase64"] as? String
+                            val avatar = rawAvatar?.takeIf { it.isNotBlank() } ?: avatarBase64?.let { ab -> if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab" }
+                            val promedio = try { (docMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
                             val mapped = Student(
                                 id = id,
                                 nombre = name,
@@ -353,20 +349,16 @@ class ProfileViewModel : ViewModel() {
                 // 2) Buscar en students por 'acudienteId' (compatibilidad con esquemas anteriores)
                 if (!userId.isNullOrBlank()) {
                     try {
-                        val byIdQuery = db.collection("students").whereEqualTo("acudienteId", userId).get().await()
-                        for (doc in byIdQuery.documents) {
-                            val id = doc.id
-                            val name = doc.getString("nombre") ?: doc.getString("name") ?: doc.getString("displayName") ?: ""
-                            val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
-                            val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
-                            val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
-                            val avatarBase64 = doc.getString("avatarBase64")
-                            val avatar = when {
-                                !rawAvatar.isNullOrBlank() -> rawAvatar
-                                !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
-                                else -> null
-                            }
-                            val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                        val byIdQuery = repo.queryWhereEqual("students", "acudienteId", userId)
+                        for (docMap in byIdQuery) {
+                            val id = docMap["__id"] as? String ?: continue
+                            val name = docMap["nombre"] as? String ?: docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                            val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
+                            val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
+                            val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
+                            val avatarBase64 = docMap["avatarBase64"] as? String
+                            val avatar = rawAvatar?.takeIf { it.isNotBlank() } ?: avatarBase64?.let { ab -> if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab" }
+                            val promedio = try { (docMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
                             val mapped = Student(
                                 id = id,
                                 nombre = name,
@@ -385,20 +377,16 @@ class ProfileViewModel : ViewModel() {
                 // 3) Buscar en students por 'acudienteEmail' como fallback
                 if (!userEmail.isNullOrBlank()) {
                     try {
-                        val byEmailQuery = db.collection("students").whereEqualTo("acudienteEmail", userEmail).get().await()
-                        for (doc in byEmailQuery.documents) {
-                            val id = doc.id
-                            val name = doc.getString("nombre") ?: doc.getString("name") ?: doc.getString("displayName") ?: ""
-                            val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
-                            val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
-                            val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
-                            val avatarBase64 = doc.getString("avatarBase64")
-                            val avatar = when {
-                                !rawAvatar.isNullOrBlank() -> rawAvatar
-                                !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
-                                else -> null
-                            }
-                            val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                        val byEmailQuery = repo.queryWhereEqual("students", "acudienteEmail", userEmail)
+                        for (docMap in byEmailQuery) {
+                            val id = docMap["__id"] as? String ?: continue
+                            val name = docMap["nombre"] as? String ?: docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                            val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
+                            val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
+                            val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
+                            val avatarBase64 = docMap["avatarBase64"] as? String
+                            val avatar = rawAvatar?.takeIf { it.isNotBlank() } ?: avatarBase64?.let { ab -> if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab" }
+                            val promedio = try { (docMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
                             val mapped = Student(
                                 id = id,
                                 nombre = name,
@@ -417,22 +405,18 @@ class ProfileViewModel : ViewModel() {
                 // 4) Buscar en users: parents array contiene userId --> mapear a Student
                 if (!userId.isNullOrBlank()) {
                     try {
-                        val usersParents = db.collection("users").whereArrayContains("parents", userId).get().await()
-                        for (doc in usersParents.documents) {
+                        val usersParents = repo.queryWhereArrayContains("users", "parents", userId)
+                        for (docMap in usersParents) {
                             try {
-                                val name = doc.getString("name") ?: doc.getString("displayName") ?: ""
-                                val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
-                                val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
-                                val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
-                                val avatarBase64 = doc.getString("avatarBase64")
-                                val avatar = when {
-                                    !rawAvatar.isNullOrBlank() -> rawAvatar
-                                    !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
-                                    else -> null
-                                }
-                                val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                                val name = docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                                val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
+                                val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
+                                val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
+                                val avatarBase64 = docMap["avatarBase64"] as? String
+                                val avatar = rawAvatar?.takeIf { it.isNotBlank() } ?: avatarBase64?.let { ab -> if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab" }
+                                val promedio = try { (docMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
                                 val mapped = Student(
-                                    id = doc.id,
+                                    id = docMap["__id"] as? String ?: "",
                                     nombre = name,
                                     curso = curso,
                                     grupo = grupo,
@@ -452,22 +436,18 @@ class ProfileViewModel : ViewModel() {
                 // 5) Buscar en users por 'acudienteEmail' para mapear hijos que solo existen en users
                 if (!userEmail.isNullOrBlank()) {
                     try {
-                        val usersByAcudienteEmail = db.collection("users").whereEqualTo("acudienteEmail", userEmail).get().await()
-                        for (doc in usersByAcudienteEmail.documents) {
+                        val usersByAcudienteEmail = repo.queryWhereEqual("users", "acudienteEmail", userEmail)
+                        for (docMap in usersByAcudienteEmail) {
                             try {
-                                val name = doc.getString("name") ?: doc.getString("displayName") ?: ""
-                                val curso = doc.getString("curso") ?: doc.getString("course") ?: ""
-                                val grupo = doc.getString("grupo") ?: doc.getString("group") ?: ""
-                                val rawAvatar = doc.getString("avatarUrl") ?: doc.getString("photoUrl") ?: doc.getString("avatar")
-                                val avatarBase64 = doc.getString("avatarBase64")
-                                val avatar = when {
-                                    !rawAvatar.isNullOrBlank() -> rawAvatar
-                                    !avatarBase64.isNullOrBlank() -> if (avatarBase64.startsWith("data:")) avatarBase64 else "data:image/jpeg;base64,$avatarBase64"
-                                    else -> null
-                                }
-                                val promedio = try { (doc.getDouble("promedio") ?: doc.getLong("promedio")?.toDouble() ?: 0.0) } catch (_: Exception) { 0.0 }
+                                val name = docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                                val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
+                                val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
+                                val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
+                                val avatarBase64 = docMap["avatarBase64"] as? String
+                                val avatar = rawAvatar?.takeIf { it.isNotBlank() } ?: avatarBase64?.let { ab -> if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab" }
+                                val promedio = try { (docMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
                                 val mapped = Student(
-                                    id = doc.id,
+                                    id = docMap["__id"] as? String ?: "",
                                     nombre = name,
                                     curso = curso,
                                     grupo = grupo,
@@ -493,25 +473,22 @@ class ProfileViewModel : ViewModel() {
                     if (s.nombre.isBlank()) {
                         try {
                             // Preferir students/{id} si existe
-                            val stDoc = try { db.collection("students").document(s.id).get().await() } catch (_: Exception) { null }
-                            val nameFromStudents = stDoc?.getString("nombre") ?: stDoc?.getString("name") ?: stDoc?.getString("displayName")
-                            if (!nameFromStudents.isNullOrBlank()) {
+                            val stDocMap = repo.getDocumentData("students", s.id)
+                            val nameFromStudents = stDocMap?.let { it["nombre"] as? String ?: it["name"] as? String ?: it["displayName"] as? String } ?: ""
+                            if (nameFromStudents.isNotBlank()) {
                                 finalList.add(s.copy(nombre = nameFromStudents))
                                 continue
                             }
-                            val uDoc = try { db.collection("users").document(s.id).get().await() } catch (_: Exception) { null }
-                            val nameFromUsers = uDoc?.getString("name") ?: uDoc?.getString("displayName")
-                            if (!nameFromUsers.isNullOrBlank()) {
+                            val uDocMap = repo.getDocumentData("users", s.id)
+                            val nameFromUsers = uDocMap?.let { it["name"] as? String ?: it["displayName"] as? String } ?: ""
+                            if (nameFromUsers.isNotBlank()) {
                                 finalList.add(s.copy(nombre = nameFromUsers))
                                 continue
                             }
-                            finalList.add(s)
                         } catch (_: Exception) {
-                            finalList.add(s)
                         }
-                    } else {
-                        finalList.add(s)
                     }
+                    finalList.add(s)
                 }
 
                 val resolved = finalList.toList()
@@ -545,9 +522,9 @@ class ProfileViewModel : ViewModel() {
                     _roleString.value = null
                     return@launch
                 }
-                val doc = db.collection("users").document(uid).get().await()
-                if (doc.exists()) {
-                    val role = doc.getString("role") ?: doc.getString("rol") ?: doc.getString("roleString")
+                val userMap = repo.getDocumentData("users", uid)
+                if (userMap != null) {
+                    val role = userMap["role"] as? String ?: userMap["rol"] as? String ?: userMap["roleString"] as? String
                     _roleString.value = role
                 } else {
                     _roleString.value = null
@@ -574,29 +551,51 @@ class ProfileViewModel : ViewModel() {
             val uid = auth.currentUser?.uid
             if (uid.isNullOrBlank()) return@launch
             try {
-                val teacherRef = db.collection("teachers").document(uid)
-                val userRef = db.collection("users").document(uid)
                 val updates = mutableMapOf<String, Any?>()
                 if (name != null) updates["name"] = name
                 if (phone != null) updates["phone"] = phone
 
                 if (!photoUrl.isNullOrBlank()) {
                     if (photoUrl.startsWith("data:")) {
-                        // Almacenar como photoBase64 (sin el prefijo 'data:...;base64,') y mantener la URL legible
+                        // decode base64 and upload to Storage, then set photoUrl to the storage download URL
                         val base64 = photoUrl.substringAfter(",", photoUrl)
-                        updates["photoBase64"] = base64
-                        // mantener campo legible con data URI para evitar que la UI se quede en blanco
-                        updates["photoUrl"] = photoUrl
+                        try {
+                            val bytes = Base64.decode(base64, Base64.DEFAULT)
+                            val filename = "users/$uid/photo_${System.currentTimeMillis()}.jpg"
+                            val ref = storage.reference.child(filename)
+                            ref.putBytes(bytes).addOnSuccessListener {
+                                ref.downloadUrl.addOnSuccessListener { dl ->
+                                    updates["photoUrl"] = dl.toString()
+                                    // apply updates to both teachers and users
+                                    if (updates.isNotEmpty()) {
+                                        repo.setDocumentFields("teachers", uid, updates)
+                                        repo.setDocumentFields("users", uid, updates)
+                                    }
+                                }.addOnFailureListener {
+                                    // fallback: don't store base64 in Firestore
+                                }
+                            }.addOnFailureListener {
+                                // upload failed
+                            }
+                        } catch (e: Exception) {
+                            // decoding/upload failed; skip storing base64
+                        }
+                        // return early because we already triggered async upload above
+                        // and we'll refresh teacher data when downloadUrl callback completes
                     } else {
-                        // URL remota: guardar en photoUrl y borrar photoBase64 para evitar conflictos
+                        // Remote URL: just save it
                         updates["photoUrl"] = photoUrl
-                        updates["photoBase64"] = null
                     }
                 }
 
+                // If updates contains only async upload placeholder, the repo update will be done in the upload callback.
                 if (updates.isNotEmpty()) {
-                    teacherRef.set(updates, SetOptions.merge()).await()
-                    userRef.set(updates.mapKeys { if (it.key == "photoBase64") "photoBase64" else it.key }, SetOptions.merge()).await()
+                    // ensure we don't write large base64 blobs
+                    val filtered = updates.filterKeys { k -> k != "photoBase64" }
+                    if (filtered.isNotEmpty()) {
+                        repo.setDocumentFields("teachers", uid, filtered)
+                        repo.setDocumentFields("users", uid, filtered)
+                    }
                 }
 
                 // Refrescar estado local
@@ -614,7 +613,6 @@ class ProfileViewModel : ViewModel() {
                     val input = resolver.openInputStream(uri) ?: throw Exception("No se puede abrir el archivo")
                     val raw = input.use { it.readBytes() }
                     val mime = resolver.getType(uri) ?: "image/jpeg"
-                    // Si es muy grande, intentar recomprimir
                     val finalBytes = if (raw.size > 500_000) {
                         val bmp = BitmapFactory.decodeByteArray(raw, 0, raw.size)
                         val baos = ByteArrayOutputStream()
@@ -625,8 +623,6 @@ class ProfileViewModel : ViewModel() {
                 }
 
                 val (finalBytes, mime) = bytesAndMime
-                val base64 = Base64.encodeToString(finalBytes, Base64.NO_WRAP)
-                val dataUri = "data:$mime;base64,$base64"
 
                 val uid = auth.currentUser?.uid
                 if (uid.isNullOrBlank()) {
@@ -634,20 +630,23 @@ class ProfileViewModel : ViewModel() {
                     return@launch
                 }
 
-                val teacherRef = db.collection("teachers").document(uid)
-                val userRef = db.collection("users").document(uid)
-                val map = mapOf(
-                    "photoBase64" to base64,
-                    // guardar también la URL legible para lectura inmediata en la UI
-                    "photoUrl" to dataUri
-                )
-                teacherRef.set(map, SetOptions.merge()).await()
-                userRef.set(map, SetOptions.merge()).await()
-
-                // Actualizar estado local
-                loadTeacherData()
-
-                callback(dataUri, null)
+                // upload to Firebase Storage instead of writing base64 to Firestore
+                val filename = "users/$uid/photo_${System.currentTimeMillis()}.jpg"
+                val ref = storage.reference.child(filename)
+                ref.putBytes(finalBytes).addOnSuccessListener {
+                    ref.downloadUrl.addOnSuccessListener { dl ->
+                        val url = dl.toString()
+                        val map = mapOf("photoUrl" to url)
+                        repo.setDocumentFields("teachers", uid, map)
+                        repo.setDocumentFields("users", uid, map)
+                        loadTeacherData()
+                        callback(url, null)
+                    }.addOnFailureListener { e ->
+                        callback(null, e.message ?: "Error obteniendo URL")
+                    }
+                }.addOnFailureListener { e ->
+                    callback(null, e.message ?: "Error subiendo imagen")
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "uploadPhotoAsBase64WithResolver: error", e)
                 callback(null, e.message ?: "Error desconocido")
@@ -672,8 +671,6 @@ class ProfileViewModel : ViewModel() {
                 }
 
                 val (finalBytes, mime) = bytesAndMime
-                val base64 = Base64.encodeToString(finalBytes, Base64.NO_WRAP)
-                val dataUri = "data:$mime;base64,$base64"
 
                 val uid = auth.currentUser?.uid
                 if (uid.isNullOrBlank()) {
@@ -681,23 +678,25 @@ class ProfileViewModel : ViewModel() {
                     return@launch
                 }
 
-                val userRef = db.collection("users").document(uid)
-                val studentsRef = db.collection("students").document(uid)
-
-                val map = mapOf(
-                    "avatarBase64" to base64,
-                    "avatar" to dataUri,
-                    // mantener avatarUrl también por consistencia con lectura
-                    "avatarUrl" to dataUri
-                )
-
-                userRef.set(map, SetOptions.merge()).await()
-                studentsRef.set(map, SetOptions.merge()).await()
-
-                // Refrescar student y demás
-                loadStudentData()
-
-                callback(dataUri, null)
+                val filename = "students/$uid/avatar_${System.currentTimeMillis()}.jpg"
+                val ref = storage.reference.child(filename)
+                ref.putBytes(finalBytes).addOnSuccessListener {
+                    ref.downloadUrl.addOnSuccessListener { dl ->
+                        val url = dl.toString()
+                        val map = mapOf(
+                            "avatarUrl" to url,
+                            "avatar" to url
+                        )
+                        repo.setDocumentFields("users", uid, map)
+                        repo.setDocumentFields("students", uid, map)
+                        loadStudentData()
+                        callback(url, null)
+                    }.addOnFailureListener { e ->
+                        callback(null, e.message ?: "Error obteniendo URL")
+                    }
+                }.addOnFailureListener { e ->
+                    callback(null, e.message ?: "Error subiendo imagen")
+                }
             } catch (e: Exception) {
                 Log.w(TAG, "uploadStudentPhotoAsBase64WithResolver: error", e)
                 callback(null, e.message ?: "Error desconocido")
@@ -712,24 +711,28 @@ class ProfileViewModel : ViewModel() {
             try {
                 // users
                 try {
-                    val users = db.collection("users").get().await()
-                    for (d in users.documents) {
+                    val usersDocs = repo.getAllDocuments("users")
+                    for (doc in usersDocs) {
                         try {
-                            val id = d.id
-                            val pb = d.getString("photoBase64")
-                            val pr = d.getString("photoUrl")
-                            val ab = d.getString("avatarBase64")
-                            val ar = d.getString("avatarUrl")
-                            val updates = mutableMapOf<String, Any?>()
+                            val id = doc["__id"] as? String ?: continue
+                            val pb = (doc["photoBase64"] as? String) ?: (doc["photo_base64"] as? String)
+                            val pr = doc["photoUrl"] as? String ?: doc["photourl"] as? String
                             if (!pb.isNullOrBlank() && pr.isNullOrBlank()) {
-                                updates["photoUrl"] = "data:image/jpeg;base64,$pb"
-                            }
-                            if (!ab.isNullOrBlank() && ar.isNullOrBlank()) {
-                                updates["avatarUrl"] = if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab"
-                            }
-                            if (updates.isNotEmpty()) {
-                                db.collection("users").document(id).set(updates, SetOptions.merge()).await()
-                                updated++
+                                // upload to storage
+                                try {
+                                    val base64 = if (pb.startsWith("data:")) pb.substringAfter(",") else pb
+                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val filename = "users/$id/photo_${System.currentTimeMillis()}.jpg"
+                                    val ref = storage.reference.child(filename)
+                                    ref.putBytes(bytes).addOnSuccessListener {
+                                        ref.downloadUrl.addOnSuccessListener { dl ->
+                                            val url = dl.toString()
+                                            repo.setDocumentFields("users", id, mapOf("photoUrl" to url))
+                                            repo.deleteFields("users", id, listOf("photoBase64", "photo_base64"))
+                                        }
+                                    }
+                                    updated++
+                                } catch (_: Exception) { }
                             }
                         } catch (_: Exception) { }
                     }
@@ -737,39 +740,59 @@ class ProfileViewModel : ViewModel() {
 
                 // teachers
                 try {
-                    val docs = db.collection("teachers").get().await()
-                    for (d in docs.documents) {
+                    val teacherDocs = repo.getAllDocuments("teachers")
+                    for (doc in teacherDocs) {
                         try {
-                            val id = d.id
-                            val pb = d.getString("photoBase64")
-                            val pr = d.getString("photoUrl")
+                            val id = doc["__id"] as? String ?: continue
+                            val pb = doc["photoBase64"] as? String
+                            val pr = doc["photoUrl"] as? String
                             val updates = mutableMapOf<String, Any?>()
                             if (!pb.isNullOrBlank() && pr.isNullOrBlank()) {
-                                updates["photoUrl"] = "data:image/jpeg;base64,$pb"
+                                // migrate base64 to storage
+                                try {
+                                    val base64 = if (pb.startsWith("data:")) pb.substringAfter(",") else pb
+                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val filename = "teachers/$id/photo_${System.currentTimeMillis()}.jpg"
+                                    val ref = storage.reference.child(filename)
+                                    ref.putBytes(bytes).addOnSuccessListener {
+                                        ref.downloadUrl.addOnSuccessListener { dl ->
+                                            val url = dl.toString()
+                                            repo.setDocumentFields("teachers", id, mapOf("photoUrl" to url))
+                                            repo.deleteFields("teachers", id, listOf("photoBase64", "photo_base64"))
+                                        }
+                                    }
+                                    updated++
+                                } catch (_: Exception) { }
                             }
-                            if (updates.isNotEmpty()) {
-                                db.collection("teachers").document(id).set(updates, SetOptions.merge()).await()
-                                updated++
-                            }
+                            // updates performed in callbacks above
                         } catch (_: Exception) { }
                     }
                 } catch (_: Exception) { }
 
                 // students
                 try {
-                    val docs = db.collection("students").get().await()
-                    for (d in docs.documents) {
+                    val studentDocs = repo.getAllDocuments("students")
+                    for (doc in studentDocs) {
                         try {
-                            val id = d.id
-                            val ab = d.getString("avatarBase64")
-                            val ar = d.getString("avatarUrl")
+                            val id = doc["__id"] as? String ?: continue
+                            val ab = doc["avatarBase64"] as? String
+                            val ar = doc["avatarUrl"] as? String
                             val updates = mutableMapOf<String, Any?>()
                             if (!ab.isNullOrBlank() && ar.isNullOrBlank()) {
-                                updates["avatarUrl"] = if (ab.startsWith("data:")) ab else "data:image/jpeg;base64,$ab"
-                            }
-                            if (updates.isNotEmpty()) {
-                                db.collection("students").document(id).set(updates, SetOptions.merge()).await()
-                                updated++
+                                try {
+                                    val base64 = if (ab.startsWith("data:")) ab.substringAfter(",") else ab
+                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val filename = "students/$id/avatar_${System.currentTimeMillis()}.jpg"
+                                    val ref = storage.reference.child(filename)
+                                    ref.putBytes(bytes).addOnSuccessListener {
+                                        ref.downloadUrl.addOnSuccessListener { dl ->
+                                            val url = dl.toString()
+                                            repo.setDocumentFields("students", id, mapOf("avatarUrl" to url, "avatar" to url))
+                                            repo.deleteFields("students", id, listOf("avatarBase64", "avatar_base64"))
+                                        }
+                                    }
+                                    updated++
+                                } catch (_: Exception) { }
                             }
                         } catch (_: Exception) { }
                     }
@@ -782,4 +805,4 @@ class ProfileViewModel : ViewModel() {
         }
     }
 
-}
+ }

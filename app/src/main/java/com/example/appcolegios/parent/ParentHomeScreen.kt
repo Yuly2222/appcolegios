@@ -68,10 +68,10 @@ data class ParentDashboardState(
 fun ParentHomeScreen() {
     // Usar ProfileViewModel para obtener hijos reales
     val profileVm: ProfileViewModel = viewModel()
-    val childrenList: List<Student> by profileVm.children.collectAsState()
-    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState()
+    val childrenList: List<Student> by profileVm.children.collectAsState(initial = emptyList())
+    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState(initial = null)
     val selectedChildIndex = selectedIndexState ?: 0
-    val studentResult by profileVm.student.collectAsState()
+    val studentResult by profileVm.student.collectAsState(initial = null)
     val currentStudent = studentResult?.getOrNull()
 
     var showSelectChildDialog by remember { mutableStateOf(false) }

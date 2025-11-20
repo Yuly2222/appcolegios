@@ -2,13 +2,12 @@ package com.example.appcolegios.academico
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.appcolegios.data.FirestoreRepository
 import com.example.appcolegios.data.model.ClassSession
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 data class ScheduleUiState(
     val schedule: Map<Int, List<ClassSession>> = emptyMap(),
@@ -17,8 +16,8 @@ data class ScheduleUiState(
 )
 
 class ScheduleViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val repo = FirestoreRepository()
 
     private val _uiState = MutableStateFlow(ScheduleUiState())
     val uiState: StateFlow<ScheduleUiState> = _uiState
@@ -36,10 +35,19 @@ class ScheduleViewModel : ViewModel() {
             }
 
             try {
-                // Assuming schedule is stored under the student's document
-                val snapshot = db.collection("students").document(userId)
-                    .collection("schedule").orderBy("startTime").get().await()
-                val scheduleList = snapshot.toObjects(ClassSession::class.java)
+                val docs = repo.getSubcollectionDocuments("students", userId, "schedule")
+                val scheduleList = docs.mapNotNull { doc ->
+                    try {
+                        ClassSession(
+                            dayOfWeek = (doc["dayOfWeek"] as? Number)?.toInt() ?: (doc["dia"] as? Number)?.toInt() ?: 0,
+                            subject = doc["subject"] as? String ?: doc["materia"] as? String ?: "",
+                            teacher = doc["teacher"] as? String ?: doc["profesor"] as? String ?: "",
+                            startTime = doc["startTime"] as? String ?: doc["horaInicio"] as? String ?: "",
+                            endTime = doc["endTime"] as? String ?: doc["horaFin"] as? String ?: "",
+                            classroom = doc["classroom"] as? String ?: doc["aula"] as? String ?: ""
+                        )
+                    } catch (_: Exception) { null }
+                }
                 val scheduleMap = scheduleList.groupBy { it.dayOfWeek }
                 _uiState.value = ScheduleUiState(schedule = scheduleMap, isLoading = false)
             } catch (e: Exception) {
@@ -48,4 +56,3 @@ class ScheduleViewModel : ViewModel() {
         }
     }
 }
-

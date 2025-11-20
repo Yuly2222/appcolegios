@@ -1,7 +1,7 @@
 package com.example.appcolegios.data.model
 
 data class Schedule(
-    val classes: List<ClassSession> = emptyList()
+    var classes: List<ClassSession> = emptyList()
 )
 
 data class ClassSession(

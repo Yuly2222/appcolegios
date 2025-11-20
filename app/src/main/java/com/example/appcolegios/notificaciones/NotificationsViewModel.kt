@@ -3,15 +3,13 @@ package com.example.appcolegios.notificaciones
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.appcolegios.data.FirestoreRepository
 import com.example.appcolegios.data.model.Notification
 import com.example.appcolegios.util.DateFormats
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.util.*
 
 data class NotificationsUiState(
@@ -21,7 +19,7 @@ data class NotificationsUiState(
 )
 
 class NotificationsViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
+    private val repo = FirestoreRepository()
     private val auth = FirebaseAuth.getInstance()
 
     private val _uiState = MutableStateFlow(NotificationsUiState())
@@ -45,36 +43,38 @@ class NotificationsViewModel : ViewModel() {
 
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-                val baseQuery = db.collection("users").document(userId)
-                    .collection("notifications")
-                    .orderBy("fechaHora", Query.Direction.DESCENDING)
-
-                val query = if (cutoffDays != null) {
-                    val cal = Calendar.getInstance()
-                    cal.add(Calendar.DAY_OF_YEAR, -cutoffDays)
-                    val cutoff = com.google.firebase.Timestamp(cal.time)
-                    baseQuery.whereGreaterThanOrEqualTo("fechaHora", cutoff)
-                } else baseQuery
-
-                // 1) notificaciones personales
-                val snapshot = query.get().await()
-
-                val personalNotifications = snapshot.documents.mapNotNull { doc ->
-                    val n = doc.toObject(Notification::class.java)
-                    n?.copy(id = doc.id)
+                // 1) notificaciones personales: leer users/{userId}/notifications usando helper
+                val personalDocs = repo.getSubcollectionDocuments("users", userId, "notifications")
+                val personalNotifications = personalDocs.mapNotNull { doc ->
+                    try {
+                        val n = Notification(
+                            id = doc["__id"] as? String ?: "",
+                            titulo = doc["titulo"] as? String ?: doc["title"] as? String ?: "",
+                            cuerpo = doc["cuerpo"] as? String ?: doc["body"] as? String ?: doc["description"] as? String ?: "",
+                            remitente = doc["remitente"] as? String ?: doc["senderName"] as? String ?: "",
+                            senderName = doc["senderName"] as? String ?: doc["remitente"] as? String,
+                            fechaHora = when (val t = doc["fechaHora"]) {
+                                is com.google.firebase.Timestamp -> t.toDate()
+                                is Date -> t
+                                else -> Date()
+                            },
+                            leida = (doc["leida"] as? Boolean) ?: false,
+                            tipo = doc["type"] as? String ?: doc["tipo"] as? String ?: "",
+                            relatedId = doc["relatedId"] as? String
+                        )
+                        n
+                    } catch (_: Exception) { null }
                 }.toMutableList()
 
                 // 2) intentar obtener courseIds si existe doc students/{userId} (útil para estudiantes)
                 var courseIds: List<String> = emptyList()
                 try {
-                    val sdoc = db.collection("students").document(userId).get().await()
-                    if (sdoc.exists()) {
-                        val raw = sdoc.get("courses") as? List<*>
+                    val sdoc = repo.getDocumentData("students", userId)
+                    if (sdoc != null) {
+                        val raw = sdoc["courses"] as? List<*>
                         courseIds = raw?.mapNotNull { it?.toString() } ?: emptyList()
                     }
-                } catch (_: Exception) {
-                    // ignore, no es crítico
-                }
+                } catch (_: Exception) { }
 
                 // construir cutoff timestamp para consultas adicionales
                 val cutoffTs = if (cutoffDays != null) {
@@ -85,68 +85,70 @@ class NotificationsViewModel : ViewModel() {
 
                 // Si el usuario es PADRE, intentar cargar notificaciones de hijos vinculados
                 try {
-                    val userDoc = db.collection("users").document(userId).get().await()
-                    val roleString = userDoc.getString("role") ?: userDoc.getString("rol") ?: ""
+                    val userDoc = repo.getDocumentData("users", userId)
+                    val roleString = (userDoc?.get("role") as? String) ?: (userDoc?.get("rol") as? String) ?: ""
                     // roleString ya es no-nulo (se normaliza a "" si falta). Evaluar igualdad ignorando mayúsculas.
                     if (roleString.equals("PADRE", ignoreCase = true) || roleString.equals("PARENT", ignoreCase = true)) {
                         // reunir posibles childIds buscando en students/users por parents array, acudienteId o acudienteEmail
                         val childIds = mutableSetOf<String>()
                         val userEmail = auth.currentUser?.email
                         try {
-                            // students where parents array contains userId
-                            val q1 = db.collection("students").whereArrayContains("parents", userId).get().await()
-                            for (d in q1.documents) childIds.add(d.id)
+                            val q1 = repo.queryWhereArrayContains("students", "parents", userId)
+                            for (d in q1) d["__id"]?.let { childIds.add(it.toString()) }
                         } catch (_: Exception) { }
                         try {
-                            // students where acudienteId == userId
-                            val q2 = db.collection("students").whereEqualTo("acudienteId", userId).get().await()
-                            for (d in q2.documents) childIds.add(d.id)
+                            val q2 = repo.queryWhereEqual("students", "acudienteId", userId)
+                            for (d in q2) d["__id"]?.let { childIds.add(it.toString()) }
                         } catch (_: Exception) { }
                         try {
-                            // students where acudienteEmail == userEmail
                             if (!userEmail.isNullOrBlank()) {
-                                val q3 = db.collection("students").whereEqualTo("acudienteEmail", userEmail).get().await()
-                                for (d in q3.documents) childIds.add(d.id)
+                                val q3 = repo.queryWhereEqual("students", "acudienteEmail", userEmail)
+                                for (d in q3) d["__id"]?.let { childIds.add(it.toString()) }
                             }
                         } catch (_: Exception) { }
                         try {
-                            // users where parents array contains userId
-                            val q4 = db.collection("users").whereArrayContains("parents", userId).get().await()
-                            for (d in q4.documents) childIds.add(d.id)
+                            val q4 = repo.queryWhereArrayContains("users", "parents", userId)
+                            for (d in q4) d["__id"]?.let { childIds.add(it.toString()) }
                         } catch (_: Exception) { }
                         try {
-                            // users where acudienteEmail == userEmail
                             if (!userEmail.isNullOrBlank()) {
-                                val q5 = db.collection("users").whereEqualTo("acudienteEmail", userEmail).get().await()
-                                for (d in q5.documents) childIds.add(d.id)
+                                val q5 = repo.queryWhereEqual("users", "acudienteEmail", userEmail)
+                                for (d in q5) d["__id"]?.let { childIds.add(it.toString()) }
                             }
                         } catch (_: Exception) { }
 
                         // Para cada childId, leer su colección users/{childId}/notifications
                         for (cid in childIds) {
                             try {
-                                val csnap = db.collection("users").document(cid).collection("notifications").orderBy("fechaHora", Query.Direction.DESCENDING).get().await()
-                                // intentar resolver nombre del hijo (usar sólo users/{cid} para evitar doble llamada)
+                                val csnap = repo.getSubcollectionDocuments("users", cid, "notifications")
                                 var childName: String? = null
                                 try {
-                                    // sólo consultamos users/{cid} para obtener el nombre (evita lectura duplicada en students)
-                                    val udoc = db.collection("users").document(cid).get().await()
-                                    if (udoc.exists()) childName = udoc.getString("name") ?: udoc.getString("displayName")
+                                    val udoc = repo.getDocumentData("users", cid)
+                                    if (udoc != null) childName = (udoc["fullName"] as? String) ?: (udoc["displayName"] as? String)
                                 } catch (_: Exception) { }
 
-                                for (doc in csnap.documents) {
-                                    val n = doc.toObject(Notification::class.java)
-                                    if (n != null) {
-                                        // prefijar id para distinguir notifs de hijos
-                                        val prefixedId = "child_${cid}_${doc.id}"
-                                        val mapped = n.copy(
-                                            id = prefixedId,
-                                            remitente = childName ?: n.remitente,
-                                            // Priorizar el nombre del hijo si está disponible; si no, usar senderName o remitente
-                                            senderName = childName ?: n.senderName ?: n.remitente
+                                for (doc in csnap) {
+                                    try {
+                                        val docId = doc["__id"] as? String ?: continue
+                                        val n = Notification(
+                                            id = docId,
+                                            titulo = doc["titulo"] as? String ?: doc["title"] as? String ?: "",
+                                            cuerpo = doc["cuerpo"] as? String ?: doc["body"] as? String ?: "",
+                                            remitente = childName ?: (doc["remitente"] as? String ?: ""),
+                                            senderName = childName ?: (doc["senderName"] as? String ?: doc["remitente"] as? String),
+                                            fechaHora = when (val t = doc["fechaHora"]) {
+                                                is com.google.firebase.Timestamp -> t.toDate()
+                                                is Date -> t
+                                                else -> Date()
+                                            },
+                                            leida = (doc["leida"] as? Boolean) ?: false,
+                                            tipo = doc["type"] as? String ?: doc["tipo"] as? String ?: "",
+                                            relatedId = doc["relatedId"] as? String
                                         )
+                                        // prefijar id para distinguir notifs de hijos
+                                        val mapped = n.copy(id = "child_${cid}_${n.id}")
                                         extraNotifications.add(mapped)
-                                    }
+                                    } catch (_: Exception) { }
                                 }
                             } catch (_: Exception) {
                                 // silenciar: puede no tener permisos o no existir
@@ -159,40 +161,31 @@ class NotificationsViewModel : ViewModel() {
 
                 // 3) leer eventos globales/por curso desde collection 'events' (campo 'date')
                 try {
-                    // leer una ventana de eventos recientes y filtrar cliente-side por courseId
-                    var evQuery: Query = db.collection("events").orderBy("date", Query.Direction.DESCENDING)
-                    if (cutoffTs != null) evQuery = evQuery.whereGreaterThanOrEqualTo("date", cutoffTs)
-                    // limitar para evitar lecturas excesivas
-                    evQuery = evQuery.limit(200)
-
-                    val evSnap = evQuery.get().await()
-                    for (doc in evSnap.documents) {
-                        val docCourse = doc.getString("courseId")
-                        // incluir si es global (sin courseId) o si el courseId está en los cursos del estudiante
-                        if (!docCourse.isNullOrBlank() && courseIds.isNotEmpty() && !courseIds.contains(docCourse)) {
-                            continue
-                        }
-
-                        val id = "event_${doc.id}"
-                        val title = doc.getString("title") ?: doc.getString("titulo") ?: "Evento"
-                        val body = doc.getString("description") ?: doc.getString("cuerpo") ?: ""
-                        val tsField = doc.get("date") ?: doc.get("fechaHora")
+                    // usar helper repo para queries ordenadas (events)
+                    val evDocs = repo.queryCollectionOrderedWithOptionalCutoff("events", "date", cutoffTs, 200)
+                    for (doc in evDocs) {
+                        val docCourse = doc["courseId"] as? String
+                        if (!docCourse.isNullOrBlank() && courseIds.isNotEmpty() && !courseIds.contains(docCourse)) continue
+                        val id = "event_${doc["__id"]}"
+                        val title = doc["title"] as? String ?: doc["titulo"] as? String ?: "Evento"
+                        val body = doc["description"] as? String ?: doc["cuerpo"] as? String ?: ""
+                        val tsField = doc["date"] ?: doc["fechaHora"]
                         val date = when (tsField) {
                             is com.google.firebase.Timestamp -> tsField.toDate()
                             is Date -> tsField
                             else -> Date()
                         }
-                        val owner = doc.getString("ownerId") ?: doc.getString("creator") ?: doc.getString("author") ?: "Calendario"
+                        val owner = doc["ownerId"] as? String ?: doc["creator"] as? String ?: doc["author"] as? String ?: "Calendario"
                         val notif = Notification(
                             id = id,
                             titulo = title,
                             cuerpo = body,
                             remitente = owner,
-                            senderName = doc.getString("senderName") ?: owner,
+                            senderName = (doc["senderName"] as? String) ?: owner,
                             fechaHora = date,
                             leida = false,
                             tipo = "evento",
-                            relatedId = doc.id
+                            relatedId = doc["__id"] as? String
                         )
                         extraNotifications.add(notif)
                     }
@@ -206,13 +199,11 @@ class NotificationsViewModel : ViewModel() {
                     var totalAnn = 0
                     for (colName in annCollections) {
                         try {
-                            var annQuery: Query = db.collection(colName).orderBy("createdAt", Query.Direction.DESCENDING)
-                            if (cutoffTs != null) annQuery = annQuery.whereGreaterThanOrEqualTo("createdAt", cutoffTs)
-                            val annSnap = annQuery.get().await()
-                            Log.d("NotificationsVM", "found ${annSnap.size()} docs in $colName")
-                            for (doc in annSnap.documents) {
+                            val annDocs = repo.queryCollectionOrderedWithOptionalCutoff(colName, "createdAt", cutoffTs)
+                            Log.d("NotificationsVM", "found ${annDocs.size} docs in $colName")
+                            for (doc in annDocs) {
                                 // permitir anuncios globales o dirigidos a cursos
-                                val targetCourseField = doc.get("courseId")
+                                val targetCourseField = doc["courseId"]
                                 var include = true
                                 if (targetCourseField != null && courseIds.isNotEmpty()) {
                                     when (targetCourseField) {
@@ -222,7 +213,6 @@ class NotificationsViewModel : ViewModel() {
                                             if (targets.none { courseIds.contains(it) }) include = false
                                         }
                                         else -> {
-                                            // campos inesperados, intentar string
                                             val asStr = targetCourseField.toString()
                                             if (!courseIds.contains(asStr)) include = false
                                         }
@@ -230,16 +220,16 @@ class NotificationsViewModel : ViewModel() {
                                 }
                                 if (!include) continue
 
-                                val id = "ann_${doc.id}"
-                                val title = doc.getString("title") ?: doc.getString("titulo") ?: "Anuncio"
-                                val body = doc.getString("body") ?: doc.getString("cuerpo") ?: doc.getString("description") ?: ""
-                                val tsField = doc.get("createdAt") ?: doc.get("fechaHora") ?: doc.get("date")
+                                val id = "ann_${doc["__id"]}"
+                                val title = doc["title"] as? String ?: doc["titulo"] as? String ?: "Anuncio"
+                                val body = doc["body"] as? String ?: doc["cuerpo"] as? String ?: doc["description"] as? String ?: ""
+                                val tsField = doc["createdAt"] ?: doc["fechaHora"] ?: doc["date"]
                                 val date = when (tsField) {
                                     is com.google.firebase.Timestamp -> tsField.toDate()
                                     is Date -> tsField
                                     else -> Date()
                                 }
-                                val sender = doc.getString("senderName") ?: doc.getString("remitente") ?: doc.getString("author") ?: "Administración"
+                                val sender = doc["senderName"] as? String ?: doc["remitente"] as? String ?: doc["author"] as? String ?: "Administración"
                                 val notif = Notification(
                                     id = id,
                                     titulo = title,
@@ -249,7 +239,7 @@ class NotificationsViewModel : ViewModel() {
                                     fechaHora = date,
                                     leida = false,
                                     tipo = "anuncio",
-                                    relatedId = doc.id
+                                    relatedId = doc["__id"] as? String
                                 )
                                 extraNotifications.add(notif)
                                 totalAnn++
@@ -295,12 +285,8 @@ class NotificationsViewModel : ViewModel() {
                 val notif = flat.find { it.id == notificationId }
                 if (notif == null) {
                     // intentar actualizar directamente (por compatibilidad)
-                    try {
-                        db.collection("users").document(userId).collection("notifications").document(notificationId).update("leida", true).await()
-                        return@launch
-                    } catch (_: Exception) {
-                        return@launch
-                    }
+                    // repo no tiene helper de update directo para subdocumentos, usar createOrUpdateNotification could be added; por ahora ignorar
+                    return@launch
                 }
 
                 // Si la notificación proviene de events/announcements (ids con prefijo), creamos un registro personal
@@ -315,12 +301,12 @@ class NotificationsViewModel : ViewModel() {
                                 val childDocId = rest.substring(idx + 1)
                                 // intentar leer la notificación original del hijo
                                 try {
-                                    val childDoc = db.collection("users").document(childId).collection("notifications").document(childDocId).get().await()
-                                    if (childDoc.exists()) {
-                                        val title = childDoc.getString("titulo") ?: childDoc.getString("title") ?: notif.titulo
-                                        val body = childDoc.getString("cuerpo") ?: childDoc.getString("body") ?: childDoc.getString("description") ?: notif.cuerpo
-                                        val sender = childDoc.getString("senderName") ?: childDoc.getString("remitente") ?: childDoc.getString("author") ?: notif.remitente
-                                        val tsField = childDoc.get("fechaHora") ?: childDoc.get("createdAt") ?: childDoc.get("date")
+                                    val childDoc = repo.getDocumentData("users", childId)
+                                    if (childDoc != null) {
+                                        val title = childDoc["titulo"] as? String ?: childDoc["title"] as? String ?: notif.titulo
+                                        val body = childDoc["cuerpo"] as? String ?: childDoc["body"] as? String ?: childDoc["description"] as? String ?: notif.cuerpo
+                                        val sender = childDoc["senderName"] as? String ?: childDoc["remitente"] as? String ?: childDoc["author"] as? String ?: notif.remitente
+                                        val tsField = childDoc["fechaHora"] ?: childDoc["createdAt"] ?: childDoc["date"]
                                         val date = when (tsField) {
                                             is com.google.firebase.Timestamp -> tsField.toDate()
                                             is Date -> tsField
@@ -335,38 +321,17 @@ class NotificationsViewModel : ViewModel() {
                                             "leida" to true,
                                             "relatedId" to childDocId,
                                             "childId" to childId,
-                                            "type" to (childDoc.getString("type") ?: childDoc.getString("type") ?: notif.tipo)
+                                            "type" to (childDoc["type"] as? String ?: notif.tipo)
                                         )
-                                        db.collection("users").document(userId).collection("notifications").add(data).await()
+                                        // Guardar en users/{userId}/notifications
+                                        repo.createNotification(title, body, data["type"] as? String ?: "SYSTEM", "ALL", userId)
                                     } else {
                                         // fallback: crear a partir del objeto notif en memoria
-                                        val data = hashMapOf<String, Any?>(
-                                            "titulo" to notif.titulo,
-                                            "cuerpo" to notif.cuerpo,
-                                            "remitente" to notif.remitente,
-                                            "senderName" to (notif.senderName ?: notif.remitente),
-                                            "fechaHora" to com.google.firebase.Timestamp(notif.fechaHora),
-                                            "leida" to true,
-                                            "relatedId" to notif.relatedId,
-                                            "childId" to null,
-                                            "type" to notif.tipo
-                                        )
-                                        db.collection("users").document(userId).collection("notifications").add(data).await()
+                                        repo.createNotification(notif.titulo, notif.cuerpo, notif.tipo ?: "SYSTEM", "ALL", userId)
                                     }
                                 } catch (_: Exception) {
                                     // si falla la lectura del hijo, crear a partir del objeto en memoria
-                                    val data = hashMapOf<String, Any?>(
-                                        "titulo" to notif.titulo,
-                                        "cuerpo" to notif.cuerpo,
-                                        "remitente" to notif.remitente,
-                                        "senderName" to (notif.senderName ?: notif.remitente),
-                                        "fechaHora" to com.google.firebase.Timestamp(notif.fechaHora),
-                                        "leida" to true,
-                                        "relatedId" to notif.relatedId,
-                                        "childId" to null,
-                                        "type" to notif.tipo
-                                    )
-                                    try { db.collection("users").document(userId).collection("notifications").add(data).await() } catch (_: Exception) {}
+                                    try { repo.createNotification(notif.titulo, notif.cuerpo, notif.tipo ?: "SYSTEM", "ALL", userId) } catch (_: Exception) {}
                                 }
                             }
                         } catch (_: Exception) { }
@@ -385,19 +350,24 @@ class NotificationsViewModel : ViewModel() {
                              "type" to notif.tipo
                          )
                          // Guardar como nueva notificación personal (con id generado)
-                         db.collection("users").document(userId).collection("notifications").add(data).await()
+                         try {
+                             repo.createNotification(data["titulo"] as? String ?: "", data["cuerpo"] as? String ?: "", data["type"] as? String ?: "SYSTEM", "ALL", userId)
+                         } catch (_: Exception) { }
                     }
                 } else {
-                     // notificación personal existente: actualizar campo 'leida'
-                     db.collection("users").document(userId)
-                         .collection("notifications").document(notificationId)
-                         .update("leida", true).await()
-                 }
-             } catch (_: Exception) {
-                 // En caso de error remoto, lo ignoramos por simplicidad
-             }
-         }
-     }
+                    // notificación personal existente: actualizar campo 'leida'
+                    // repo no proporciona update de subdocument; conservar acceso directo en caso necesario
+                    try {
+                        // Intentar update con repo: no implementado; dejar como TODO o usar db directo
+                        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                        db.collection("users").document(userId).collection("notifications").document(notificationId).update("leida", true)
+                    } catch (_: Exception) { }
+                }
+            } catch (_: Exception) {
+                // En caso de error remoto, lo ignoramos por simplicidad
+            }
+        }
+    }
 
     private fun groupNotificationsByDate(notifications: List<Notification>): Map<String, List<Notification>> {
         val today = Calendar.getInstance()

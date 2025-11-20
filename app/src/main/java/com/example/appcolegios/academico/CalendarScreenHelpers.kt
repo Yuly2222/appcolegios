@@ -160,6 +160,7 @@ fun CalendarGrid(
     }
 }
 
+@Suppress("DEPRECATION")
 @Composable
 fun EventCard(event: CalendarEvent, onEdit: ((CalendarEvent) -> Unit)? = null, onDelete: ((CalendarEvent) -> Unit)? = null) {
     Card(
@@ -280,7 +281,7 @@ fun AddEventDialog(
                     Box {
                         TextButton(onClick = { expandedType = true }) { Text(type.name) }
                         DropdownMenu(expanded = expandedType, onDismissRequest = { expandedType = false }) {
-                            EventType.values().forEach { ev ->
+                            EventType.entries.forEach { ev ->
                                 DropdownMenuItem(text = { Text(ev.name) }, onClick = { type = ev; expandedType = false })
                             }
                         }
@@ -378,7 +379,7 @@ fun EditEventDialog(event: CalendarEvent, onDismiss: () -> Unit, onSave: (Calend
                 Box {
                     TextButton(onClick = { expandedTypeEdit = true }) { Text(type.name) }
                     DropdownMenu(expanded = expandedTypeEdit, onDismissRequest = { expandedTypeEdit = false }) {
-                        EventType.values().forEach { ev ->
+                        EventType.entries.forEach { ev ->
                             DropdownMenuItem(text = { Text(ev.name) }, onClick = { type = ev; expandedTypeEdit = false })
                         }
                     }

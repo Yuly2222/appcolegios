@@ -28,7 +28,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.TextButton
-import kotlinx.coroutines.flow.collectLatest
 
 // Nuevo modelo simple para pagos
 data class Pago(
@@ -50,8 +49,9 @@ fun PaymentsScreen() {
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
     val profileVm: ProfileViewModel = viewModel()
-    val children: List<com.example.appcolegios.data.model.Student> by profileVm.children.collectAsState()
-    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState()
+    val children by profileVm.children.collectAsState(initial = emptyList())
+    val selectedIndexState: Int? by profileVm.selectedChildIndex.collectAsState(initial = null)
+    val studentResult by profileVm.student.collectAsState(initial = null)
     val selectedChildIndex = selectedIndexState ?: 0
     val isParent = (userData.role ?: "").equals("PARENT", ignoreCase = true) || (userData.role ?: "").equals("PADRE", ignoreCase = true)
 
@@ -65,7 +65,6 @@ fun PaymentsScreen() {
     var errorMsg by remember { mutableStateOf<String?>(null) }
 
     // Observamos el student seleccionado centralmente
-    val studentResult by profileVm.student.collectAsState()
     val currentStudent = studentResult?.getOrNull()
     val targetId = if (isParent) currentStudent?.id else auth.currentUser?.uid
 

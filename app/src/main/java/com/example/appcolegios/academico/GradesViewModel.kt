@@ -2,13 +2,12 @@ package com.example.appcolegios.academico
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.appcolegios.data.FirestoreRepository
 import com.example.appcolegios.data.model.Grade
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 
 data class GradesUiState(
     val grades: List<Grade> = emptyList(),
@@ -18,8 +17,8 @@ data class GradesUiState(
 )
 
 class GradesViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val repo = FirestoreRepository()
 
     private val _uiState = MutableStateFlow(GradesUiState())
     val uiState: StateFlow<GradesUiState> = _uiState
@@ -37,14 +36,20 @@ class GradesViewModel : ViewModel() {
             }
 
             try {
-                val snapshot = db.collection("students").document(userId)
-                    .collection("grades").get().await()
-                val grades = snapshot.toObjects(Grade::class.java)
-                val average = if (grades.isNotEmpty()) {
-                    grades.sumOf { it.calificacion * it.ponderacion } / grades.sumOf { it.ponderacion }
-                } else {
-                    0.0
+                val gradeDocs = repo.getSubcollectionDocuments("students", userId, "grades")
+                val grades = gradeDocs.map { doc ->
+                    Grade(
+                        materiaId = doc["__id"] as? String ?: "",
+                        materia = doc["subject"] as? String ?: doc["materia"] as? String ?: "",
+                        periodo = (doc["period"] as? String)?.toIntOrNull() ?: (doc["periodo"] as? Number)?.toInt() ?: 0,
+                        calificacion = (doc["score"] as? Number)?.toDouble() ?: (doc["calificacion"] as? Number)?.toDouble() ?: 0.0,
+                        ponderacion = (doc["maxScore"] as? Number)?.toDouble() ?: (doc["ponderacion"] as? Number)?.toDouble() ?: 1.0
+                    )
                 }
+
+                val weightedSum = grades.sumOf { (if (it.ponderacion > 0) it.calificacion * it.ponderacion else it.calificacion) }
+                val weightTotal = grades.sumOf { if (it.ponderacion > 0) it.ponderacion else 1.0 }
+                val average = if (grades.isNotEmpty() && weightTotal > 0) weightedSum / weightTotal else 0.0
                 _uiState.value = GradesUiState(grades = grades, overallAverage = average, isLoading = false)
             } catch (e: Exception) {
                 _uiState.value = GradesUiState(isLoading = false, error = e.message)
@@ -52,4 +57,3 @@ class GradesViewModel : ViewModel() {
         }
     }
 }
-

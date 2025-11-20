@@ -2,13 +2,12 @@ package com.example.appcolegios.academico
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.appcolegios.data.FirestoreRepository
 import com.example.appcolegios.data.model.AttendanceEntry
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.util.*
 
 data class AttendanceUiState(
@@ -18,8 +17,8 @@ data class AttendanceUiState(
 )
 
 class AttendanceViewModel : ViewModel() {
-    private val db = FirebaseFirestore.getInstance()
     private val auth = FirebaseAuth.getInstance()
+    private val repo = FirestoreRepository()
 
     private val _uiState = MutableStateFlow(AttendanceUiState())
     val uiState: StateFlow<AttendanceUiState> = _uiState
@@ -37,10 +36,23 @@ class AttendanceViewModel : ViewModel() {
             }
 
             try {
-                val snapshot = db.collection("students").document(userId)
-                    .collection("attendance").get().await()
-                val entries = snapshot.toObjects(AttendanceEntry::class.java)
-                    .associateBy { it.fecha }
+                val docs = repo.getSubcollectionDocuments("students", userId, "attendance")
+                val entries = docs.mapNotNull { doc ->
+                    val dateObj = doc["date"] ?: doc["fecha"] ?: return@mapNotNull null
+                    val estado = doc["status"] as? String ?: doc["estado"] as? String ?: ""
+                    val date = when (dateObj) {
+                        is com.google.firebase.Timestamp -> dateObj.toDate()
+                        is Date -> dateObj
+                        is String -> try { java.text.SimpleDateFormat("yyyy-MM-dd").parse(dateObj) } catch (_: Exception) { null }
+                        else -> null
+                    }
+                    if (date != null) date to AttendanceEntry(fecha = date, estado = when (estado.uppercase()) {
+                        "PRESENT" , "PRESENTE" -> com.example.appcolegios.data.model.AttendanceStatus.PRESENTE
+                        "ABSENT", "AUSENTE" -> com.example.appcolegios.data.model.AttendanceStatus.AUSENTE
+                        "LATE", "TARDE" -> com.example.appcolegios.data.model.AttendanceStatus.TARDE
+                        else -> com.example.appcolegios.data.model.AttendanceStatus.PRESENTE
+                    }) else null
+                }.toMap()
                 _uiState.value = AttendanceUiState(entries = entries, isLoading = false)
             } catch (e: Exception) {
                 _uiState.value = AttendanceUiState(isLoading = false, error = e.message)
@@ -48,4 +60,3 @@ class AttendanceViewModel : ViewModel() {
         }
     }
 }
-

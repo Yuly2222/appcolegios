@@ -4,8 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.appcolegios.data.UserPreferencesRepository
+import com.example.appcolegios.data.FirestoreRepository
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,7 +18,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val authState: StateFlow<AuthState> = _authState
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
-    private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+    private val repo: FirestoreRepository = FirestoreRepository()
     private val userPrefs = UserPreferencesRepository(application)
 
     init {
@@ -60,7 +60,8 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun register(email: String, password: String, displayName: String, role: String = "ADMIN") {
+    // Añadimos groupId opcional para asignar al registrar (si aplica)
+    fun register(email: String, password: String, displayName: String, role: String = "ADMIN", groupId: String? = null) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             try {
@@ -69,12 +70,15 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 if (user != null) {
                     // Normalizar rol a mayúsculas antes de guardar
                     val normalizedRole = role.uppercase(Locale.ROOT)
-                    val userMap = hashMapOf(
-                        "displayName" to displayName,
-                        "email" to email,
-                        "role" to normalizedRole
+                    // Crear documento users/{uid} usando el repositorio
+                    // Use unified helper to create users/{uid} and role document, and ensure groups/Grades
+                    repo.createUserAndRole(
+                        uid = user.uid,
+                        email = email,
+                        fullName = displayName,
+                        role = normalizedRole,
+                        groupId = groupId
                     )
-                    firestore.collection("users").document(user.uid).set(userMap).await()
                     // enviar email de verificación
                     try { user.sendEmailVerification().await() } catch (_: Exception) {}
                     _authState.value = AuthState.Idle
@@ -110,42 +114,37 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private fun fetchUserRole(userId: String) {
         viewModelScope.launch {
             try {
-                val document = firestore.collection("users").document(userId).get().await()
-                // Si el documento no tiene rol, asumimos 'ADMIN'
-                var role = document.getString("role") ?: ""
-                var displayName = document.getString("displayName") ?: ""
+                val userDoc = repo.getDocumentData("users", userId)
+                var role = userDoc?.get("role") as? String ?: ""
+                var displayName = userDoc?.get("fullName") as? String ?: ""
 
-                // Si no encontramos documento en users, intentar buscar por email en colecciones específicas
                 if (role.isBlank() && displayName.isBlank()) {
-                    // intentar localizar por uid en colecciones conocidas
-                    val collections = listOf("students", "teachers", "parents", "admins")
+                    // Si no existe users/{uid} podemos intentar localizar en students/teachers/parents
+                    val collections = listOf("students", "teachers", "parents")
                     for (coll in collections) {
-                        val doc = firestore.collection(coll).document(userId).get().await()
-                        if (doc.exists()) {
-                            role = doc.getString("role") ?: when (coll) {
-                                "students" -> "ESTUDIANTE"
-                                "teachers" -> "DOCENTE"
-                                "parents" -> "PADRE"
-                                "admins" -> "ADMIN"
+                        val docMap = repo.getDocumentData(coll, userId)
+                        if (docMap != null) {
+                            role = when (coll) {
+                                "students" -> "STUDENT"
+                                "teachers" -> "TEACHER"
+                                "parents" -> "PARENT"
                                 else -> "ADMIN"
                             }
-                            displayName = (doc.getString("nombres") ?: doc.getString("name")) ?: ""
+                            displayName = docMap["fullName"] as? String ?: (docMap["name"] as? String ?: "")
                             break
                         }
                     }
-                    // Si aún no hallamos por uid, intentar buscar por email si FirebaseAuth tiene usuario con ese uid
+                    // Si aún no hallamos por uid, intentar buscar por email
                     if (displayName.isBlank()) {
                         try {
                             val userRecord = auth.currentUser
-                            // no siempre disponible; intentar buscar por email en colecciones
                             val email = userRecord?.email
                             if (!email.isNullOrBlank()) {
-                                for (coll in listOf("students", "teachers", "parents", "admins")) {
-                                    val query = firestore.collection(coll).whereEqualTo("email", email).limit(1).get().await()
-                                    if (!query.isEmpty) {
-                                        val d = query.documents[0]
-                                        role = d.getString("role") ?: role
-                                        displayName = (d.getString("nombres") ?: d.getString("name")) ?: displayName
+                                for (coll in collections) {
+                                    val docMap = repo.queryDocumentByEmail(coll, email)
+                                    if (docMap != null) {
+                                        role = docMap["role"] as? String ?: role
+                                        displayName = docMap["fullName"] as? String ?: (docMap["name"] as? String ?: displayName)
                                         break
                                     }
                                 }
