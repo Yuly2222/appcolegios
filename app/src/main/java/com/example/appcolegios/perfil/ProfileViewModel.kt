@@ -20,7 +20,6 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import com.google.firebase.firestore.SetOptions
 
 // Modelo simple para perfil de docente
 data class TeacherProfile(
@@ -568,8 +567,12 @@ class ProfileViewModel : ViewModel() {
                                     updates["photoUrl"] = dl.toString()
                                     // apply updates to both teachers and users
                                     if (updates.isNotEmpty()) {
-                                        repo.setDocumentFields("teachers", uid, updates)
-                                        repo.setDocumentFields("users", uid, updates)
+                                        viewModelScope.launch {
+                                            try {
+                                                repo.setDocumentFields("teachers", uid, updates)
+                                                repo.setDocumentFields("users", uid, updates)
+                                            } catch (_: Exception) { }
+                                        }
                                     }
                                 }.addOnFailureListener {
                                     // fallback: don't store base64 in Firestore
@@ -622,7 +625,7 @@ class ProfileViewModel : ViewModel() {
                     Pair(finalBytes, mime)
                 }
 
-                val (finalBytes, mime) = bytesAndMime
+                val finalBytes = bytesAndMime.first
 
                 val uid = auth.currentUser?.uid
                 if (uid.isNullOrBlank()) {
@@ -637,8 +640,14 @@ class ProfileViewModel : ViewModel() {
                     ref.downloadUrl.addOnSuccessListener { dl ->
                         val url = dl.toString()
                         val map = mapOf("photoUrl" to url)
-                        repo.setDocumentFields("teachers", uid, map)
-                        repo.setDocumentFields("users", uid, map)
+                        viewModelScope.launch {
+                            try {
+                                repo.setDocumentFields("teachers", uid, map)
+                                repo.setDocumentFields("users", uid, map)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "uploadPhotoAsBase64WithResolver: error writing urls", e)
+                            }
+                        }
                         loadTeacherData()
                         callback(url, null)
                     }.addOnFailureListener { e ->
@@ -670,7 +679,7 @@ class ProfileViewModel : ViewModel() {
                     Pair(finalBytes, mime)
                 }
 
-                val (finalBytes, mime) = bytesAndMime
+                val finalBytes = bytesAndMime.first
 
                 val uid = auth.currentUser?.uid
                 if (uid.isNullOrBlank()) {
@@ -687,8 +696,14 @@ class ProfileViewModel : ViewModel() {
                             "avatarUrl" to url,
                             "avatar" to url
                         )
-                        repo.setDocumentFields("users", uid, map)
-                        repo.setDocumentFields("students", uid, map)
+                        viewModelScope.launch {
+                            try {
+                                repo.setDocumentFields("users", uid, map)
+                                repo.setDocumentFields("students", uid, map)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "uploadStudentPhotoAsBase64WithResolver: error writing urls", e)
+                            }
+                        }
                         loadStudentData()
                         callback(url, null)
                     }.addOnFailureListener { e ->
@@ -721,14 +736,18 @@ class ProfileViewModel : ViewModel() {
                                 // upload to storage
                                 try {
                                     val base64 = if (pb.startsWith("data:")) pb.substringAfter(",") else pb
-                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val bytes = Base64.decode(base64, Base64.DEFAULT)
                                     val filename = "users/$id/photo_${System.currentTimeMillis()}.jpg"
                                     val ref = storage.reference.child(filename)
                                     ref.putBytes(bytes).addOnSuccessListener {
                                         ref.downloadUrl.addOnSuccessListener { dl ->
                                             val url = dl.toString()
-                                            repo.setDocumentFields("users", id, mapOf("photoUrl" to url))
-                                            repo.deleteFields("users", id, listOf("photoBase64", "photo_base64"))
+                                            viewModelScope.launch {
+                                                try {
+                                                    repo.setDocumentFields("users", id, mapOf("photoUrl" to url))
+                                                    repo.deleteFields("users", id, listOf("photoBase64", "photo_base64"))
+                                                } catch (_: Exception) { }
+                                            }
                                         }
                                     }
                                     updated++
@@ -746,19 +765,22 @@ class ProfileViewModel : ViewModel() {
                             val id = doc["__id"] as? String ?: continue
                             val pb = doc["photoBase64"] as? String
                             val pr = doc["photoUrl"] as? String
-                            val updates = mutableMapOf<String, Any?>()
                             if (!pb.isNullOrBlank() && pr.isNullOrBlank()) {
                                 // migrate base64 to storage
                                 try {
                                     val base64 = if (pb.startsWith("data:")) pb.substringAfter(",") else pb
-                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val bytes = Base64.decode(base64, Base64.DEFAULT)
                                     val filename = "teachers/$id/photo_${System.currentTimeMillis()}.jpg"
                                     val ref = storage.reference.child(filename)
                                     ref.putBytes(bytes).addOnSuccessListener {
                                         ref.downloadUrl.addOnSuccessListener { dl ->
                                             val url = dl.toString()
-                                            repo.setDocumentFields("teachers", id, mapOf("photoUrl" to url))
-                                            repo.deleteFields("teachers", id, listOf("photoBase64", "photo_base64"))
+                                            viewModelScope.launch {
+                                                try {
+                                                    repo.setDocumentFields("teachers", id, mapOf("photoUrl" to url))
+                                                    repo.deleteFields("teachers", id, listOf("photoBase64", "photo_base64"))
+                                                } catch (_: Exception) { }
+                                            }
                                         }
                                     }
                                     updated++
@@ -777,18 +799,21 @@ class ProfileViewModel : ViewModel() {
                             val id = doc["__id"] as? String ?: continue
                             val ab = doc["avatarBase64"] as? String
                             val ar = doc["avatarUrl"] as? String
-                            val updates = mutableMapOf<String, Any?>()
                             if (!ab.isNullOrBlank() && ar.isNullOrBlank()) {
                                 try {
                                     val base64 = if (ab.startsWith("data:")) ab.substringAfter(",") else ab
-                                    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                                    val bytes = Base64.decode(base64, Base64.DEFAULT)
                                     val filename = "students/$id/avatar_${System.currentTimeMillis()}.jpg"
                                     val ref = storage.reference.child(filename)
                                     ref.putBytes(bytes).addOnSuccessListener {
                                         ref.downloadUrl.addOnSuccessListener { dl ->
                                             val url = dl.toString()
-                                            repo.setDocumentFields("students", id, mapOf("avatarUrl" to url, "avatar" to url))
-                                            repo.deleteFields("students", id, listOf("avatarBase64", "avatar_base64"))
+                                            viewModelScope.launch {
+                                                try {
+                                                    repo.setDocumentFields("students", id, mapOf("avatarUrl" to url, "avatar" to url))
+                                                    repo.deleteFields("students", id, listOf("avatarBase64", "avatar_base64"))
+                                                } catch (_: Exception) { }
+                                            }
                                         }
                                     }
                                     updated++
