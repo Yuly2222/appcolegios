@@ -92,8 +92,23 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                                             // también actualizar teachers/{uid} si existe
                                             try { db.collection("teachers").document(uidFound).set(userUpdate, SetOptions.merge()).await() } catch (_: Exception) {}
                                             assigned++
+                                            // Asegurar documento en collection 'courses' con campos completos
+                                            if (groupKey.isNotBlank()) {
+                                                try {
+                                                    val courseId = groupKey // usar groupKey como id de course
+                                                    val courseFields = mapOf<String, Any?>(
+                                                        "name" to "${curso.trim()} - ${grupo.trim()}",
+                                                        "grade" to curso.trim(),
+                                                        "section" to grupo.trim(),
+                                                        "teacherId" to uidFound,
+                                                        "teacherEmail" to (if (identifier.contains("@")) identifier.trim().lowercase() else ""),
+                                                        "studentsCount" to 0
+                                                    )
+                                                    try { repo.createOrUpdateCourse(courseId, courseFields) } catch (_: Exception) {}
+                                                } catch (_: Exception) {}
+                                            }
                                         }
-                                    } catch (_: Exception) {}
+                            } catch (_: Exception) {}
                                 } else {
                                     // student import: buscar uid por email, crear si no existe, y actualizar students/{uid} y users/{uid}
                                     try {
@@ -122,32 +137,45 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                                             studentUpdate["grupos"] = FieldValue.arrayUnion(normalizedGroup)
                                             try { db.collection("students").document(uid).set(studentUpdate, SetOptions.merge()).await() } catch (_: Exception) {}
 
-                                            val userUpdate = mutableMapOf<String, Any?>(
-                                                "role" to "ESTUDIANTE",
+                                            // No cambiar el rol del usuario; solo actualizar campos relacionados con el grupo
+                                            val userGroupFields = mutableMapOf<String, Any?>(
                                                 "groupKey" to normalizedGroup,
                                                 "curso" to normalizedGroup,
                                                 "curso_simple" to curso.trim(),
-                                                "grupo" to grupo.trim()
+                                                "grupo" to grupo.trim(),
+                                                "updatedAt" to com.google.firebase.Timestamp.now()
                                             )
-                                            userUpdate["grupos"] = FieldValue.arrayUnion(normalizedGroup)
-                                            try { db.collection("users").document(uid).set(userUpdate, SetOptions.merge()).await() } catch (_: Exception) {}
+                                            userGroupFields["grupos"] = FieldValue.arrayUnion(normalizedGroup)
+                                            try { repo.setDocumentFields("users", uid, userGroupFields); } catch (_: Exception) {}
+
+                                            // Asegurar documento en collection 'courses' con campos completos
+                                            try {
+                                                val courseId = normalizedGroup
+                                                val courseFields = mapOf<String, Any?>(
+                                                    "name" to "${curso.trim()} - ${grupo.trim()}",
+                                                    "grade" to curso.trim(),
+                                                    "section" to grupo.trim(),
+                                                    "studentsCount" to 0
+                                                )
+                                                try { repo.createOrUpdateCourse(courseId, courseFields) } catch (_: Exception) {}
+                                            } catch (_: Exception) {}
 
                                             // También crear/actualizar documento en Grades/{groupKey}/students/{uid}
-                                            try {
-                                                val gradeDoc = db.collection("Grades").document(normalizedGroup)
-                                                val studentEntry = mapOf(
-                                                    "uid" to uid,
-                                                    "email" to emailLower,
-                                                    "assignedAt" to com.google.firebase.Timestamp.now()
-                                                )
-                                                // Guardar como subdocumento para facilitar consultas por grupo y por uid
-                                                gradeDoc.collection("students").document(uid).set(studentEntry).await()
-                                            } catch (_: Exception) {
-                                                // ignorar fallo en creación de Grades
-                                            }
+                                             try {
+                                                 val gradeDoc = db.collection("Grades").document(normalizedGroup)
+                                                 val studentEntry = mapOf(
+                                                     "uid" to uid,
+                                                     "email" to emailLower,
+                                                     "assignedAt" to com.google.firebase.Timestamp.now()
+                                                 )
+                                                 // Guardar como subdocumento para facilitar consultas por grupo y por uid
+                                                 gradeDoc.collection("students").document(uid).set(studentEntry).await()
+                                             } catch (_: Exception) {
+                                                 // ignorar fallo en creación de Grades
+                                             }
 
-                                            assigned++
-                                        }
+                                             assigned++
+                                         }
                                     } catch (_: Exception) {
                                     }
                                 }
@@ -258,7 +286,20 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                                     repo.createOrUpdateUser(uid, identifier, "", "TEACHER", groupId = if (groupKey.isNotBlank()) groupKey else null)
                                     // ensure teacher doc exists and groups updated
                                     repo.createOrUpdateTeacherDocument(uid, identifier, groups = if (groupKey.isNotBlank()) listOf(groupKey) else emptyList())
-                                    if (groupKey.isNotBlank()) repo.ensureGroupExistsPublic(groupKey, mapOf("name" to "${curso.trim()} - ${grupo.trim()}"))
+                                    if (groupKey.isNotBlank()) {
+                                        repo.ensureGroupExistsPublic(groupKey, mapOf("name" to "${curso.trim()} - ${grupo.trim()}"))
+                                        try {
+                                            val courseFields = mapOf<String, Any?>(
+                                                "name" to "${curso.trim()} - ${grupo.trim()}",
+                                                "grade" to curso.trim(),
+                                                "section" to grupo.trim(),
+                                                "teacherId" to uid,
+                                                "teacherEmail" to identifier.trim().lowercase(),
+                                                "studentsCount" to 0
+                                            )
+                                            repo.createOrUpdateCourse(groupKey, courseFields)
+                                        } catch (_: Exception) {}
+                                    }
                                     dialogMessage = context.getString(R.string.teacher_assigned_success)
                                 } catch (e: Exception) {
                                     dialogMessage = "Error al asignar: ${e.message}"
@@ -319,9 +360,27 @@ fun AssignGroupAdminScreen(navController: NavController? = null, initialIdentifi
                                 try {
                                     // Ensure group exists
                                     repo.ensureGroupExistsPublic(groupKey, mapOf("name" to "${curso.trim()} - ${grupo.trim()}"))
-                                    // Update student and user docs
+                                    try {
+                                        val courseFields = mapOf<String, Any?>(
+                                            "name" to "${curso.trim()} - ${grupo.trim()}",
+                                            "grade" to curso.trim(),
+                                            "section" to grupo.trim(),
+                                            "studentsCount" to 0
+                                        )
+                                        repo.createOrUpdateCourse(groupKey, courseFields)
+                                    } catch (_: Exception) {}
+                                    // Update student document
                                     repo.createOrUpdateStudentDocument(uid, identifier, groupKey)
-                                    repo.createOrUpdateUser(uid, identifier, identifier, "STUDENT", groupId = groupKey)
+                                    // No cambiar rol en users: solo actualizar campos de grupo
+                                    try {
+                                        val userGroupFields2 = mapOf<String, Any?>(
+                                            "groupKey" to groupKey,
+                                            "curso" to groupKey,
+                                            "curso_simple" to curso.trim(),
+                                            "grupo" to grupo.trim()
+                                        )
+                                        repo.setDocumentFields("users", uid, userGroupFields2)
+                                    } catch (_: Exception) {}
                                     dialogMessage = "Estudiante asignado al grupo '$groupKey' correctamente."
                                 } catch (e: Exception) {
                                     dialogMessage = "Error al asignar: ${e.message}"

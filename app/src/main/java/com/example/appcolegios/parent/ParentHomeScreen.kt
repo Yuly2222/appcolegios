@@ -18,6 +18,9 @@ import java.util.Locale
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.appcolegios.perfil.ProfileViewModel
 import com.example.appcolegios.data.model.Student
+import com.example.appcolegios.data.FirestoreRepository
+import com.google.firebase.Timestamp
+import java.text.SimpleDateFormat
 
 // Restaurar data classes necesarias
 data class Grade(
@@ -82,8 +85,106 @@ fun ParentHomeScreen() {
     // Cuando cambie el student seleccionado en el ViewModel, actualizar el dashboard
     LaunchedEffect(currentStudent, childrenList) {
         if (currentStudent != null) {
-            // mapear Student a la vista
-            state = mapStudentToDashboard(currentStudent, selectedChildIndex, childrenList)
+            // Cargar datos reales desde Firestore: notas, pagos y notificaciones (misma lógica que las pantallas correspondientes)
+            state = state.copy(loading = true)
+            try {
+                val repo = FirestoreRepository()
+                val childId = currentStudent.id
+
+                // 1) Notas: students/{childId}/grades
+                val gradesDocs = try { repo.getSubcollectionDocuments("students", childId, "grades") } catch (_: Exception) { emptyList() }
+                val recentGrades = gradesDocs.mapNotNull { doc ->
+                    try {
+                        val subject = doc["materia"] as? String ?: doc["subject"] as? String ?: doc["name"] as? String ?: ""
+                        val period = doc["periodo"] as? String ?: doc["period"] as? String ?: ""
+                        val gradeVal: Double = run {
+                            val candidates = listOf("score", "calificacion", "grade")
+                            var raw: Any? = null
+                            for (f in candidates) {
+                                if (doc.containsKey(f)) { raw = doc[f]; break }
+                            }
+                            when (raw) {
+                                is Number -> raw.toDouble()
+                                is String -> raw.toDoubleOrNull() ?: 0.0
+                                else -> (doc["calificacion"] as? Number)?.toDouble() ?: (doc["grade"] as? Number)?.toDouble() ?: 0.0
+                            }
+                        }
+                        Grade(subject = subject, grade = gradeVal, period = period)
+                    } catch (_: Exception) { null }
+                }.take(3)
+
+                // 2) Pagos: collection 'pagos' where studentId == childId
+                val pagosDocs = try { repo.queryWhereEqual("pagos", "studentId", childId) } catch (_: Exception) { emptyList() }
+                val pendingPayments = pagosDocs.mapNotNull { doc ->
+                    try {
+                        val titulo = doc["titulo"] as? String ?: doc["title"] as? String ?: "Pago"
+                        val monto = when (val m = doc["monto"]) {
+                            is Number -> m.toDouble()
+                            is String -> m.toDoubleOrNull() ?: 0.0
+                            else -> 0.0
+                        }
+                        val fecha = when (val f = doc["fecha"]) {
+                            is Timestamp -> f.toDate()
+                            is java.util.Date -> f
+                            else -> java.util.Date()
+                        }
+                        val sdf = SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+                        val dueStr = sdf.format(fecha)
+                        val estado = doc["estado"] as? String ?: doc["status"] as? String ?: "Pendiente"
+                        Payment(concept = titulo, amount = monto, dueDate = dueStr, status = estado)
+                    } catch (_: Exception) { null }
+                }.take(3)
+
+                // 3) Notificaciones: users/{childId}/notifications
+                val notiDocs = try { repo.getSubcollectionDocuments("users", childId, "notifications") } catch (_: Exception) { emptyList() }
+                val notifs = notiDocs.mapNotNull { doc ->
+                    try {
+                        val title = doc["titulo"] as? String ?: doc["title"] as? String ?: ""
+                        val body = doc["cuerpo"] as? String ?: doc["body"] as? String ?: ""
+                        val tsField = doc["fechaHora"] ?: doc["createdAt"] ?: doc["date"]
+                        val date = when (tsField) {
+                            is Timestamp -> tsField.toDate()
+                            is java.util.Date -> tsField
+                            else -> java.util.Date()
+                        }
+                        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault())
+                        ParentNotification(title = title, message = body, date = sdf.format(date), read = (doc["leida"] as? Boolean) ?: false)
+                    } catch (_: Exception) { null }
+                }.sortedByDescending { it.date }.take(3)
+
+                // 4) Asistencia: calcular porcentaje (buscar docs en colección 'attendance' y contar presentes)
+                val attendDocs = try { repo.queryWhereEqual("attendance", "studentId", childId) } catch (_: Exception) { emptyList() }
+                var attendancePct = 0.0
+                try {
+                    if (attendDocs.isNotEmpty()) {
+                        var total = 0
+                        var present = 0
+                        for (d in attendDocs) {
+                            total += 1
+                            val records = d["records"] as? Map<*, *>
+                            val raw = records?.get(childId) as? String
+                            if (raw != null && raw.uppercase() == "PRESENTE") present += 1
+                        }
+                        if (total > 0) attendancePct = (present.toDouble() / total.toDouble()) * 100.0
+                    }
+                } catch (_: Exception) { attendancePct = 0.0 }
+
+                // Actualizar estado
+                state = ParentDashboardState(
+                    studentName = currentStudent.nombre.ifBlank { currentStudent.id },
+                    studentGrade = listOfNotNull(currentStudent.curso.takeIf { it.isNotBlank() }, currentStudent.grupo.takeIf { it.isNotBlank() }).joinToString("-"),
+                    recentGrades = recentGrades.toList(),
+                    pendingPayments = pendingPayments.toList(),
+                    attendancePercentage = attendancePct,
+                    pendingTasks = 0,
+                    notifications = notifs.toList(),
+                    children = childrenList.map { s -> ChildInfo(s.nombre.ifBlank { s.id }, listOfNotNull(s.curso.takeIf { it.isNotBlank() }, s.grupo.takeIf { it.isNotBlank() }).joinToString("-")) },
+                    selectedChildIndex = selectedChildIndex,
+                    loading = false
+                )
+            } catch (e: Exception) {
+                state = ParentDashboardState(loading = false, children = childrenList.map { s -> ChildInfo(s.nombre.ifBlank { s.id }, listOfNotNull(s.curso.takeIf { it.isNotBlank() }, s.grupo.takeIf { it.isNotBlank() }).joinToString("-")) })
+            }
         } else if (childrenList.isNotEmpty()) {
             // si no hay student pero hay hijos, usar el primero
             profileVm.selectChildAtIndex(0)

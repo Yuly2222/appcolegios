@@ -20,6 +20,9 @@ import androidx.compose.runtime.collectAsState
 import com.example.appcolegios.data.UserData
 import com.example.appcolegios.data.FirestoreRepository
 import com.google.firebase.auth.FirebaseAuth
+ import java.util.*
+import java.text.SimpleDateFormat
+import com.google.firebase.Timestamp
 
 // Estado simplificado para el dashboard de estudiante
 data class StudentDashboardState(
@@ -130,6 +133,37 @@ fun StudentHomeScreen(navController: NavController, displayName: String? = null)
                 } else if (curso.isNotBlank()) {
                     coursesList.add(CourseInfo(curso, 0, ""))
                 }
+
+                // Nuevo: cargar 'Clases de hoy' desde students/{uid}/schedule filtrando por día de la semana
+                try {
+                    val scheduleDocs = repo.getSubcollectionDocuments("students", uid, "schedule")
+                    val cal = Calendar.getInstance()
+                    val dow = cal.get(Calendar.DAY_OF_WEEK)
+                    val dayIndex = if (dow == Calendar.SUNDAY) 7 else dow - 1 // 1=Mon..7=Sun expected
+                    for (sd in scheduleDocs) {
+                        val docDay = (sd["dayOfWeek"] as? Number)?.toInt() ?: (sd["dia"] as? Number)?.toInt() ?: -1
+                        if (docDay != dayIndex) continue
+                        val subj = sd["subject"] as? String ?: sd["materia"] as? String ?: ""
+                        val courseName = sd["course"] as? String ?: sd["courseName"] as? String ?: ""
+                        val start = sd["startTime"] as? String ?: sd["horaInicio"] as? String ?: ""
+                        val room = sd["classroom"] as? String ?: sd["aula"] as? String ?: ""
+                        classesToday.add(ClassInfo(subject = subj, course = courseName, time = start, room = room))
+                    }
+                } catch (_: Exception) { /* ignore schedule read errors */ }
+
+                // Nuevo: cargar actividades recientes desde la colección 'tasks'
+                try {
+                    val tasksDocs = repo.queryCollectionOrderedWithOptionalCutoff("tasks", "createdAt", null, 10L)
+                    val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                    for (td in tasksDocs) {
+                        val title = td["title"] as? String ?: td["name"] as? String ?: "Tarea"
+                        val subject = td["subject"] as? String ?: td["materia"] as? String ?: ""
+                        val group = td["groupId"] as? String ?: td["group"] as? String ?: ""
+                        val due = (td["dueDate"] as? Timestamp)?.toDate() ?: (td["dueDate"] as? Date)
+                        val dueStr = if (due != null) sdf.format(due) else ""
+                        activities.add(ActivityInfo(title = title, type = "Tarea", course = if (subject.isNotBlank()) subject else group, dueDate = dueStr))
+                    }
+                } catch (_: Exception) { /* ignore tasks read errors */ }
             }
         } catch (_: Exception) {
             // ignorar errores de carga

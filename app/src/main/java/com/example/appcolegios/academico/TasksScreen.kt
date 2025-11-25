@@ -128,6 +128,7 @@ fun TasksScreen() {
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
     val storage = FirebaseStorage.getInstance()
+    val repo = com.example.appcolegios.data.FirestoreRepository()
 
     var loading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -150,6 +151,8 @@ fun TasksScreen() {
     val isParent = (currentUserData.role ?: "").equals("PARENT", ignoreCase = true) || (currentUserData.role ?: "").equals("PADRE", ignoreCase = true)
     var showSelectChildDialog by remember { mutableStateOf(false) }
     var selectedChildIndex by remember { mutableStateOf(0) }
+    // Detectar si el usuario es estudiante (para leer desde students/{uid}/tasks)
+    val isStudent = (currentUserData.role ?: "").equals("ESTUDIANTE", ignoreCase = true) || (currentUserData.role ?: "").equals("STUDENT", ignoreCase = true)
 
     // Si el usuario es padre y tiene un hijo seleccionado, cargaremos los cursos de ese hijo
     val selectedChildId = children.getOrNull(selectedChildIndex)?.id
@@ -225,6 +228,20 @@ fun TasksScreen() {
                     }
                 }
                 // Si no se encontraron cursos reales, la lista queda vacía (sin curso demo).
+            }
+            // Si no hay cursos y el usuario es estudiante (no parent y hay uid), intentar cargar subjects
+            if (loaded.isEmpty()) {
+                try {
+                    val curUser = auth.currentUser
+                    if (curUser != null) {
+                        val subjects = repo.getSubjectsForStudent(curUser.uid)
+                        for (s in subjects) {
+                            val sid = s["__id"]?.toString() ?: continue
+                            val sname = (s["name"] ?: s["subject"] ?: s["materia"] ?: s["title"])?.toString() ?: continue
+                            loaded.add(CourseSimple("__subject_${sid}", sname, emptyList()))
+                        }
+                    }
+                } catch (_: Exception) { }
             }
             // Si no se encontraron cursos reales, no añadimos datos de demo: la lista queda vacía y se poblará desde Firebase.
             courses = loaded
@@ -318,6 +335,76 @@ fun TasksScreen() {
             Spacer(Modifier.height(8.dp))
         }
 
+        // Si el usuario es estudiante o padre, mostramos directamente las tareas desde students/{uid}/tasks
+        val showTasksDirectly = isStudent || isParent
+
+        if (showTasksDirectly) {
+            // Cargar tareas del estudiante (o del hijo seleccionado si es padre)
+            LaunchedEffect(isStudent, selectedChildId) {
+                loadingTasks = true
+                tasksForCourse.clear()
+                try {
+                    val uidToLoad = if (isParent) selectedChildId else auth.currentUser?.uid
+                    if (!uidToLoad.isNullOrBlank()) {
+                        // intentamos ordenar por createdAt si existe
+                        val snaps = try {
+                            firestore.collection("students").document(uidToLoad).collection("tasks").orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+                        } catch (e: Exception) {
+                            // si no hay índice o campo, caemos a get simple
+                            firestore.collection("students").document(uidToLoad).collection("tasks").get().await()
+                        }
+                        for (d in snaps.documents) {
+                            val id = d.id
+                            val titleDoc = d.getString("title") ?: d.getString("titulo") ?: ""
+                            val descDoc = d.getString("description") ?: d.getString("descripcion") ?: ""
+                            val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
+                            val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
+                            val attsStr = atts.mapNotNull { it?.toString() }
+                            val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
+                            val pathsStr = paths.mapNotNull { it?.toString() }
+                            tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                        }
+                    }
+                } catch (_: Exception) {
+                } finally {
+                    loadingTasks = false
+                }
+            }
+
+            Text("Tareas", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+
+            if (loadingTasks) {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            } else {
+                if (tasksForCourse.isEmpty()) {
+                    Text("No hay tareas publicadas", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(tasksForCourse) { t ->
+                            Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(t.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(t.description.take(150), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            val d = t.dueDate
+                                            if (d != null) Spacer(Modifier.height(6.dp))
+                                            if (d != null) Text("Fecha: ${dateFormat.format(d)}", style = MaterialTheme.typography.bodySmall)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Terminamos la columna temprano cuando estamos en modo "ver tareas directamente"
+            return@Column
+        }
+
         if (selectedCourse == null) {
             Text("Cursos", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(12.dp))
@@ -355,20 +442,92 @@ fun TasksScreen() {
                 loadingTasks = true
                 tasksForCourse.clear()
                 try {
-                    val snap = firestore.collection("tasks")
-                        .whereEqualTo("courseId", course.id)
-                        .orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                        .get().await()
-                    snap.documents.forEach { d ->
-                        val id = d.id
-                        val titleDoc = d.getString("title") ?: ""
-                        val descDoc = d.getString("description") ?: ""
-                        val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
-                        val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
-                        val attsStr = atts.mapNotNull { it?.toString() }
-                        val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
-                        val pathsStr = paths.mapNotNull { it?.toString() }
-                        tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                    // Si es estudiante, leer exactamente desde students/{uid}/tasks y filtrar según el curso seleccionado
+                    if (isStudent) {
+                        val uid = auth.currentUser?.uid
+                        if (!uid.isNullOrBlank()) {
+                            val snaps = firestore.collection("students").document(uid).collection("tasks").get().await()
+                            for (d in snaps.documents) {
+                                // Filtrar por courseId o por subject para que coincida con la selección de curso
+                                val docCourseId = d.getString("courseId") ?: d.getString("course") ?: d.getString("curso")
+                                val docSubject = d.getString("subject") ?: d.getString("materia") ?: d.getString("courseName") ?: d.getString("name")
+                                val matches = if (course.id.startsWith("__subject_")) {
+                                    // comparar por nombre de subject
+                                    !docSubject.isNullOrBlank() && docSubject.equals(course.name, ignoreCase = true)
+                                } else {
+                                    !docCourseId.isNullOrBlank() && docCourseId == course.id
+                                }
+                                if (!matches) continue
+
+                                val id = d.id
+                                val titleDoc = d.getString("title") ?: d.getString("titulo") ?: ""
+                                val descDoc = d.getString("description") ?: d.getString("descripcion") ?: ""
+                                val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
+                                val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
+                                val attsStr = atts.mapNotNull { it?.toString() }
+                                val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
+                                val pathsStr = paths.mapNotNull { it?.toString() }
+                                tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                            }
+                            // Si no se obtuvo nada desde students/{uid}/tasks, hacer fallback a la colección global `tasks`
+                            if (tasksForCourse.isEmpty()) {
+                                val baseQuery = if (course.id.startsWith("__subject_")) {
+                                    firestore.collection("tasks").whereEqualTo("subject", course.name)
+                                } else {
+                                    firestore.collection("tasks").whereEqualTo("courseId", course.id)
+                                }
+                                val snap = baseQuery.orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+                                snap.documents.forEach { d ->
+                                    val id = d.id
+                                    val titleDoc = d.getString("title") ?: ""
+                                    val descDoc = d.getString("description") ?: ""
+                                    val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
+                                    val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
+                                    val attsStr = atts.mapNotNull { it?.toString() }
+                                    val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
+                                    val pathsStr = paths.mapNotNull { it?.toString() }
+                                    tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                                }
+                            }
+                        } else {
+                            // fallback: leer directamente desde la colección global `tasks`
+                            val baseQuery = if (course.id.startsWith("__subject_")) {
+                                firestore.collection("tasks").whereEqualTo("subject", course.name)
+                            } else {
+                                firestore.collection("tasks").whereEqualTo("courseId", course.id)
+                            }
+                            val snap = baseQuery.orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+                            snap.documents.forEach { d ->
+                                val id = d.id
+                                val titleDoc = d.getString("title") ?: ""
+                                val descDoc = d.getString("description") ?: ""
+                                val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
+                                val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
+                                val attsStr = atts.mapNotNull { it?.toString() }
+                                val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
+                                val pathsStr = paths.mapNotNull { it?.toString() }
+                                tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                            }
+                        }
+                    } else {
+                        val baseQuery = if (course.id.startsWith("__subject_")) {
+                            // Buscar tareas por campo subject o materia
+                            firestore.collection("tasks").whereEqualTo("subject", course.name)
+                        } else {
+                            firestore.collection("tasks").whereEqualTo("courseId", course.id)
+                        }
+                        val snap = baseQuery.orderBy("createdAt", com.google.firebase.firestore.Query.Direction.DESCENDING).get().await()
+                        snap.documents.forEach { d ->
+                            val id = d.id
+                            val titleDoc = d.getString("title") ?: ""
+                            val descDoc = d.getString("description") ?: ""
+                            val due = (d.get("dueDate") as? com.google.firebase.Timestamp)?.toDate()
+                            val atts = d.get("attachments") as? List<*> ?: emptyList<Any>()
+                            val attsStr = atts.mapNotNull { it?.toString() }
+                            val paths = d.get("attachmentPaths") as? List<*> ?: emptyList<Any>()
+                            val pathsStr = paths.mapNotNull { it?.toString() }
+                            tasksForCourse.add(TaskItem(id, titleDoc, descDoc, due, attsStr, pathsStr))
+                        }
                     }
                 } catch (_: Exception) {}
                 loadingTasks = false
@@ -496,6 +655,16 @@ fun TasksScreen() {
                                         "type" to "task"
                                     )
                                     firestore.collection("users").document(s.id).collection("notifications").add(notif)
+                                    // Además, crear una copia de la tarea dentro de students/{studentId}/tasks
+                                    try {
+                                        val studentTask = HashMap<String, Any?>()
+                                        studentTask.putAll(task)
+                                        studentTask["originalTaskId"] = ref.id
+                                        // usar el mismo id para facilitar sincronización
+                                        firestore.collection("students").document(s.id).collection("tasks").document(ref.id).set(studentTask)
+                                    } catch (_: Exception) {
+                                        // ignorar fallos individuales al escribir en subcolección del estudiante
+                                    }
                                 }
 
                                 Toast.makeText(context, "Tarea creada", Toast.LENGTH_SHORT).show()
@@ -663,6 +832,25 @@ fun TasksScreen() {
                                 "description" to eDesc,
                                 "dueDate" to if (eDate != null) com.google.firebase.Timestamp(eDate!!) else null
                             ))
+                            // Propagar cambios a copias en students/{studentId}/tasks/{t.id}
+                            try {
+                                selectedCourse?.students?.forEach { s ->
+                                    try {
+                                        val updates = mutableMapOf<String, Any?>()
+                                        updates["title"] = eTitle
+                                        updates["description"] = eDesc
+                                        updates["dueDate"] = if (eDate != null) com.google.firebase.Timestamp(eDate!!) else null
+                                        // intentar update; si falla (document no existe) hacemos set
+                                        firestore.collection("students").document(s.id).collection("tasks").document(t.id).update(updates).addOnFailureListener {
+                                            // si falla, escribir el documento (crear/merge)
+                                            try {
+                                                firestore.collection("students").document(s.id).collection("tasks").document(t.id).set(updates)
+                                            } catch (_: Exception) {}
+                                        }
+                                    } catch (_: Exception) {}
+                                }
+                            } catch (_: Exception) {}
+
                             val idx = tasksForCourse.indexOfFirst { it.id == t.id }
                             if (idx >= 0) {
                                 tasksForCourse[idx] = tasksForCourse[idx].copy(title = eTitle, description = eDesc, dueDate = eDate)
@@ -704,6 +892,12 @@ fun TasksScreen() {
                                 try { storage.reference.child(p).delete().await() } catch (_: Exception) {}
                             }
                             firestore.collection("tasks").document(t.id).delete().await()
+                            // Intentar borrar copias en students/{studentId}/tasks para los estudiantes del curso (si hay información de curso)
+                            try {
+                                selectedCourse?.students?.forEach { s ->
+                                    try { firestore.collection("students").document(s.id).collection("tasks").document(t.id).delete().await() } catch (_: Exception) {}
+                                }
+                            } catch (_: Exception) {}
                             tasksForCourse.removeAll { it.id == t.id }
                             Toast.makeText(context, "Tarea eliminada", Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {

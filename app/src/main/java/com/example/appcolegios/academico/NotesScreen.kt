@@ -54,6 +54,11 @@ fun NotesScreen() {
 
     val auth = FirebaseAuth.getInstance()
     val db = FirebaseFirestore.getInstance()
+    val repo = com.example.appcolegios.data.FirestoreRepository()
+
+    // Subjects fallback for students (materias asociadas al grupo)
+    var subjects by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selectedSubject by remember { mutableStateOf<String?>(null) }
 
     // Nombre resuelto que se mostrará en el header (resolver con jerarquía)
     var resolvedName by remember { mutableStateOf<String?>(null) }
@@ -78,12 +83,36 @@ fun NotesScreen() {
                 loading = false
                 return@LaunchedEffect
             }
+            // Cargar materias del estudiante (Subjects) como fallback/ayuda para filtrar
+            try {
+                val subs = repo.getSubjectsForStudent(uid)
+                subjects = subs.mapNotNull { s -> (s["name"] ?: s["subject"] ?: s["materia"] ?: s["title"])?.toString() }
+            } catch (_: Exception) { subjects = emptyList() }
+
             val snaps = db.collection("students").document(uid).collection("grades").get().await()
             val list = mutableListOf<Grade>()
             for (doc in snaps.documents) {
                 val subject = doc.getString("materia") ?: doc.getString("subject") ?: doc.getString("name") ?: ""
                 val period = doc.getString("periodo") ?: doc.getString("period") ?: ""
-                val gradeVal = doc.getDouble("calificacion") ?: doc.getDouble("grade") ?: 0.0
+                // Extraer la nota de forma robusta: busca "score", "calificacion", "grade".
+                val gradeVal: Double = run {
+                    val candidates = listOf("score", "calificacion", "grade")
+                    var raw: Any? = null
+                    for (f in candidates) {
+                        if (doc.contains(f)) {
+                            raw = doc.get(f)
+                            break
+                        }
+                    }
+                    when (raw) {
+                        is Number -> raw.toDouble()
+                        is String -> raw.toDoubleOrNull() ?: 0.0
+                        else -> {
+                            // Intentar also getDouble por compatibilidad
+                            doc.getDouble("calificacion") ?: doc.getDouble("grade") ?: 0.0
+                        }
+                    }
+                }
                 val obs = doc.getString("observations") ?: doc.getString("observaciones") ?: ""
                 val teacher = doc.getString("teacher") ?: doc.getString("profesor") ?: ""
                 list.add(Grade(subject, period, gradeVal, obs, teacher))
@@ -213,13 +242,31 @@ fun NotesScreen() {
             Spacer(Modifier.height(8.dp))
         }
 
-        if (grades.isEmpty()) {
+        // Mostrar selector de materias (si existen)
+        if (subjects.isNotEmpty()) {
+            Text("Filtrar por materia:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Botón para mostrar todas
+                FilterChip(selected = selectedSubject == null, onClick = { selectedSubject = null }, label = { Text("Todas") })
+                subjects.forEach { s ->
+                    FilterChip(selected = selectedSubject == s, onClick = { selectedSubject = if (selectedSubject == s) null else s }, label = { Text(s) })
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        val visibleGrades = remember(grades, selectedSubject) {
+            if (selectedSubject.isNullOrBlank()) grades else grades.filter { it.subject.equals(selectedSubject, ignoreCase = true) }
+        }
+
+        if (visibleGrades.isEmpty()) {
             Text("No hay notas para mostrar.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(grades) { grade ->
+                items(visibleGrades) { grade ->
                     GradeCard(grade)
                 }
             }

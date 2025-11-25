@@ -47,7 +47,7 @@ object TestDataInitializer {
             "id" to studentId,
             "email" to studentEmail,
             "nombre" to "Juan Camilo Díaz",
-            "rol" to "STUDENT",
+            "rol" to "ESTUDIANTE",
             "curso" to "10-A",
             "identificacion" to "1234567890",
             "fechaNacimiento" to "2008-05-15",

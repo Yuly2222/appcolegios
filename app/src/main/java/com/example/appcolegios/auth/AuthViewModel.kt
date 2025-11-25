@@ -125,7 +125,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                         val docMap = repo.getDocumentData(coll, userId)
                         if (docMap != null) {
                             role = when (coll) {
-                                "students" -> "STUDENT"
+                                "students" -> "ESTUDIANTE"
                                 "teachers" -> "TEACHER"
                                 "parents" -> "PARENT"
                                 else -> "ADMIN"

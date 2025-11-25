@@ -40,12 +40,21 @@ data class AttendanceRecord(
     val observations: String = ""
 )
 
+// Nuevo: resumen ligero de asistencia para mostrar encima de cursos/registros
+data class AttendanceSummary(
+    val percentage: Int = 0,
+    val lastDate: Date? = null,
+    val lastStatus: AttendanceStatus? = null
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AttendanceScreen() {
     val context = LocalContext.current
     val auth = FirebaseAuth.getInstance()
     val firestore = FirebaseFirestore.getInstance()
+    // Repo helper to fetch Subjects filtered by student's group
+    val repo = com.example.appcolegios.data.FirestoreRepository()
 
     val userPrefs = UserPreferencesRepository(context)
     val userData by userPrefs.userData.collectAsState(initial = com.example.appcolegios.data.UserData(null, null, null))
@@ -58,6 +67,42 @@ fun AttendanceScreen() {
     // Estado local para selección de hijo
     var showSelectChildDialog by remember { mutableStateOf(false) }
     var selectedChildIndex by remember { mutableStateOf(0) }
+
+    // Nuevo estado: resumen de asistencia para el usuario (o hijo seleccionado)
+    var attendanceSummary by remember { mutableStateOf(AttendanceSummary()) }
+
+    // Recalcular resumen para el usuario logueado (estudiante) o para el hijo seleccionado (padres)
+    LaunchedEffect(auth.currentUser?.uid, selectedChildIndex, children) {
+        try {
+            val targetId = if (isParent) children.getOrNull(selectedChildIndex)?.id else auth.currentUser?.uid
+            if (targetId.isNullOrBlank()) {
+                attendanceSummary = AttendanceSummary()
+            } else {
+                val snaps = firestore.collection("attendance").whereEqualTo("studentId", targetId).get().await()
+                var total = 0
+                var present = 0
+                var last: AttendanceRecord? = null
+                for (doc in snaps.documents) {
+                    val ts = doc.getTimestamp("date")?.toDate() ?: continue
+                    val recordsMap = doc.get("records") as? Map<*, *>
+                    val raw = recordsMap?.get(targetId) as? String
+                    val status = when (raw?.uppercase()) {
+                        "PRESENTE" -> AttendanceStatus.PRESENTE
+                        "TARDE" -> AttendanceStatus.TARDE
+                        "JUSTIFICADO" -> AttendanceStatus.JUSTIFICADO
+                        else -> AttendanceStatus.AUSENTE
+                    }
+                    total += 1
+                    if (status == AttendanceStatus.PRESENTE) present += 1
+                    if (last == null || ts.after(last.date)) last = AttendanceRecord(ts, status, doc.getString("observations") ?: "")
+                }
+                val pct = if (total > 0) ((present * 100) / total) else 0
+                attendanceSummary = AttendanceSummary(percentage = pct, lastDate = last?.date, lastStatus = last?.status)
+            }
+        } catch (_: Exception) {
+            attendanceSummary = AttendanceSummary()
+        }
+    }
 
     var loading by remember { mutableStateOf(true) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
@@ -115,6 +160,17 @@ fun AttendanceScreen() {
                                 val students = listOf(StudentSimple(user.uid, studentsSnapshot.getString("name") ?: studentsSnapshot.getString("displayName") ?: "Alumno"))
                                 loadedCourses.add(CourseSimple(doc.id, doc.getString("name") ?: "Curso", students))
                             }
+                        }
+                        // Si no hay cursos, intentar cargar materias desde Subjects que correspondan al grupo del estudiante
+                        if (loadedCourses.isEmpty()) {
+                            try {
+                                val subjects = repo.getSubjectsForStudent(user.uid)
+                                for (s in subjects) {
+                                    val sid = s["__id"]?.toString() ?: continue
+                                    val sname = (s["name"] ?: s["subject"] ?: s["materia"] ?: s["title"])?.toString() ?: continue
+                                    loadedCourses.add(CourseSimple("__subject_${sid}", sname, emptyList()))
+                                }
+                            } catch (_: Exception) { /* ignore */ }
                         }
                     }
                 }
@@ -179,12 +235,26 @@ fun AttendanceScreen() {
                 Text("No hay hijos asociados para mostrar.")
                 return@Column
             } else {
+                // Mostrar resumen encima de los registros cuando sea PADRE
+                Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Resumen de Asistencia", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        Text("Porcentaje: ${attendanceSummary.percentage}%", style = MaterialTheme.typography.bodyMedium)
+                        attendanceSummary.lastDate?.let { d ->
+                            Text("Última asistencia: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(d)} (${attendanceSummary.lastStatus?.name ?: ""})", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+
                 // Cargar registros de asistencia del childId similar a la rama de estudiante
                 var attendanceRecords by remember { mutableStateOf<List<AttendanceRecord>>(emptyList()) }
                 LaunchedEffect(childId) {
                     attendanceRecords = emptyList()
                     try {
-                        val query = firestore.collection("attendances").whereEqualTo("studentId", childId)
+                        // Cambiado: usar colección singular "attendance" en lugar de "attendances"
+                        val query = firestore.collection("attendance").whereEqualTo("studentId", childId)
                         val snaps = query.get().await()
                         val list = mutableListOf<AttendanceRecord>()
                         for (doc in snaps.documents) {
@@ -212,6 +282,21 @@ fun AttendanceScreen() {
                 }
                 return@Column
             }
+        }
+
+        // Para usuarios que no son PADRE, antes de la lista de cursos mostrar un bloque resumen de asistencia del propio estudiante
+        if (!isParent) {
+            Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Resumen de Asistencia", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(6.dp))
+                    Text("Porcentaje: ${attendanceSummary.percentage}%", style = MaterialTheme.typography.bodyMedium)
+                    attendanceSummary.lastDate?.let { d ->
+                        Text("Última asistencia: ${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(d)} (${attendanceSummary.lastStatus?.name ?: ""})", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
         }
 
         if (loading) {
@@ -306,22 +391,23 @@ fun AttendanceScreen() {
                                 saving = true
                                 val mapToSave = course.students.associate { s -> s.id to (attendanceMap[s.id]?.name ?: AttendanceStatus.PRESENTE.name) }
                                 scope.launch {
-                                    try {
-                                        val attendanceDoc = hashMapOf(
-                                            "courseId" to course.id,
-                                            "courseName" to course.name,
-                                            "date" to com.google.firebase.Timestamp.now(),
-                                            "teacherId" to (auth.currentUser?.uid ?: ""),
-                                            "records" to mapToSave
-                                        )
-                                        firestore.collection("attendances").add(attendanceDoc).await()
-                                        Toast.makeText(context, "Asistencia guardada", Toast.LENGTH_SHORT).show()
-                                    } catch (e: Exception) {
-                                        Toast.makeText(context, "Error guardando: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                                    } finally {
-                                        saving = false
-                                    }
-                                }
+                                     try {
+                                         val attendanceDoc = hashMapOf(
+                                             "courseId" to course.id,
+                                             "courseName" to course.name,
+                                             "date" to com.google.firebase.Timestamp.now(),
+                                             "teacherId" to (auth.currentUser?.uid ?: ""),
+                                             "records" to mapToSave
+                                         )
+                                         // Cambiado: guardar en colección singular "attendance"
+                                         firestore.collection("attendance").add(attendanceDoc).await()
+                                         Toast.makeText(context, "Asistencia guardada", Toast.LENGTH_SHORT).show()
+                                     } catch (e: Exception) {
+                                         Toast.makeText(context, "Error guardando: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                                     } finally {
+                                         saving = false
+                                     }
+                                 }
                             }, enabled = !saving) {
                                 if (saving) CircularProgressIndicator(modifier = Modifier.size(20.dp)) else Text("Guardar asistencia")
                             }
@@ -335,35 +421,38 @@ fun AttendanceScreen() {
                 LaunchedEffect(course, cutoffDays) {
                      attendanceRecords = emptyList()
                      try {
-                         val baseQuery = firestore.collection("attendances").whereEqualTo("courseId", course.id)
-                         val query = if (cutoffDays != null) {
-                             val cal = Calendar.getInstance()
-                             val days = cutoffDays ?: 0
-                             cal.add(Calendar.DAY_OF_YEAR, -days)
-                             val cutoff = com.google.firebase.Timestamp(cal.time)
-                             baseQuery.whereGreaterThanOrEqualTo("date", cutoff)
-                         } else baseQuery
-                         val snaps = query.get().await()
-                         val list = mutableListOf<AttendanceRecord>()
-                         for (doc in snaps.documents) {
-                             val ts = doc.getTimestamp("date")?.toDate() ?: continue
-                             val recordsMap = doc.get("records") as? Map<*, *> ?: continue
-                             val userId = auth.currentUser?.uid ?: ""
-                             val raw = recordsMap[userId] as? String ?: continue
-                             val status = when (raw.uppercase()) {
-                                 "PRESENTE" -> AttendanceStatus.PRESENTE
-                                 "TARDE" -> AttendanceStatus.TARDE
-                                 "JUSTIFICADO" -> AttendanceStatus.JUSTIFICADO
-                                 else -> AttendanceStatus.AUSENTE
-                             }
-                             val obs = doc.getString("observations") ?: ""
-                             list.add(AttendanceRecord(ts, status, obs))
-                         }
-                         attendanceRecords = list.sortedByDescending { it.date }
-                     } catch (_: Exception) {
-                         // ignore
-                     }
-                 }
+                         // Si el "curso" es una materia pseudo (id que empieza con __subject_), consultar por campo subject
+                         val baseQuery = if (course.id.startsWith("__subject_")) {
+                              firestore.collection("attendance").whereEqualTo("subject", course.name)
+                          } else firestore.collection("attendance").whereEqualTo("courseId", course.id)
+                           val query = if (cutoffDays != null) {
+                               val cal = Calendar.getInstance()
+                               val days = cutoffDays ?: 0
+                               cal.add(Calendar.DAY_OF_YEAR, -days)
+                               val cutoff = com.google.firebase.Timestamp(cal.time)
+                               baseQuery.whereGreaterThanOrEqualTo("date", cutoff)
+                           } else baseQuery
+                          val snaps = query.get().await()
+                          val list = mutableListOf<AttendanceRecord>()
+                          for (doc in snaps.documents) {
+                              val ts = doc.getTimestamp("date")?.toDate() ?: continue
+                              val recordsMap = doc.get("records") as? Map<*, *> ?: continue
+                              val userId = auth.currentUser?.uid ?: ""
+                              val raw = recordsMap[userId] as? String ?: continue
+                              val status = when (raw.uppercase()) {
+                                  "PRESENTE" -> AttendanceStatus.PRESENTE
+                                  "TARDE" -> AttendanceStatus.TARDE
+                                  "JUSTIFICADO" -> AttendanceStatus.JUSTIFICADO
+                                  else -> AttendanceStatus.AUSENTE
+                              }
+                              val obs = doc.getString("observations") ?: ""
+                              list.add(AttendanceRecord(ts, status, obs))
+                          }
+                          attendanceRecords = list.sortedByDescending { it.date }
+                      } catch (_: Exception) {
+                          // ignore
+                      }
+                  }
 
                  if (attendanceRecords.isEmpty()) {
                      Text("No se encuentran registros de asistencia para este curso.")

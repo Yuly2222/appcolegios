@@ -55,6 +55,7 @@ class FirestoreRepository(
     private val COL_GROUPS = "groups"
     private val COL_GRADES = "Grades"
     private val COL_TASKS = "tasks"
+    private val COL_COURSES = "courses"
     private val COL_EVENTS = "events"
     private val COL_ANNOUNCEMENTS = "announcements"
     private val COL_NOTIFICATIONS = "notifications"
@@ -153,7 +154,7 @@ class FirestoreRepository(
 
         // Create role-specific document
         when (role.uppercase()) {
-            "STUDENT" -> {
+            "ESTUDIANTE" -> {
                 val g = groupId ?: ""
                 createOrUpdateStudentDocument(uid, fullName, g, parentIds)
             }
@@ -230,6 +231,21 @@ class FirestoreRepository(
             "groups" to groups
         )
         teacherRef.set(sanitizeFields(data), SetOptions.merge()).await()
+    }
+
+    /**
+     * Create or update a course document in collection 'courses'.
+     * courseId should be a stable id (e.g. "10-a" or custom). Fields map may contain:
+     * name, grade, section, teacherId, teacherEmail, studentsCount, extra metadata.
+     */
+    suspend fun createOrUpdateCourse(courseId: String, fields: Map<String, Any?>) = withContext(Dispatchers.IO) {
+        if (courseId.isBlank()) return@withContext
+        val courseRef = db.collection(COL_COURSES).document(courseId)
+        val safe = sanitizeFields(fields)
+        // Merge provided fields into document
+        courseRef.set(safe, SetOptions.merge()).await()
+        // Ensure createdAt exists
+        courseRef.update("createdAt", FieldValue.serverTimestamp()).addOnFailureListener { /* ignore */ }
     }
 
     // --- GROUPS and GRADES ---
@@ -383,23 +399,49 @@ class FirestoreRepository(
         doc.set(sanitizeFields(data)).await()
     }
 
-    suspend fun createNotification(
-        title: String,
-        body: String,
-        type: String,
-        audience: String,
-        createdBy: String
-    ) = withContext(Dispatchers.IO) {
-        val doc = db.collection(COL_NOTIFICATIONS).document()
-        val data = hashMapOf<String, Any?>(
-            "title" to title,
-            "body" to body,
-            "type" to type,
-            "audience" to audience,
-            "createdBy" to createdBy,
-            "createdAt" to FieldValue.serverTimestamp()
-        )
-        doc.set(sanitizeFields(data)).await()
+    // --- SUBJECTS helpers (added) ---
+    /**
+     * Devuelve todas las materias cuya parte numérica en el campo 'group-id' coincide con gradeNumber
+     * o cuya propiedad 'gradeLevel' coincide con gradeNumber.
+     * Se retorna una lista de mapas con los datos y el campo "__id" con el id del documento.
+     */
+    suspend fun getSubjectsForGradeNumber(gradeNumber: Int): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
+        val coll = db.collection("Subjects")
+        val snaps = coll.get().await()
+        return@withContext snaps.documents.mapNotNull { doc ->
+            val data = doc.data ?: return@mapNotNull null
+            // extraer número del campo 'group-id' flexible (soporta 'group-id', 'groupId', 'group')
+            val groupField = (data["group-id"] ?: data["groupId"] ?: data["group"] ?: data["curso"] ?: "").toString()
+            val groupNumber = Regex("\\d+").find(groupField)?.value?.toIntOrNull()
+
+            // obtener gradeLevel desde distintos nombres posibles
+            val gradeLevelAny = data["gradeLevel"] ?: data["grade"] ?: data["grado"]
+            val gradeLevel = when (gradeLevelAny) {
+                is Number -> gradeLevelAny.toInt()
+                is String -> gradeLevelAny.toIntOrNull()
+                else -> null
+            }
+
+            if (groupNumber == gradeNumber || gradeLevel == gradeNumber) {
+                (data + mapOf("__id" to doc.id))
+            } else null
+        }
+    }
+
+    /**
+     * Dado el id de un estudiante, intenta resolver su grupo y devolver las subjects
+     * cuyo número del grupo coincide con el gradeLevel de la materia.
+     */
+    suspend fun getSubjectsForStudent(studentUid: String): List<Map<String, Any?>> = withContext(Dispatchers.IO) {
+        try {
+            val studentSnap = db.collection(COL_STUDENTS).document(studentUid).get().await()
+            val studentData = studentSnap.data ?: emptyMap<String, Any?>()
+            val groupId = (studentData["groupId"] ?: studentData["curso"] ?: studentData["course"] ?: studentData["grupo"] ?: "").toString()
+            val gradeNumber = Regex("\\d+").find(groupId)?.value?.toIntOrNull()
+            return@withContext if (gradeNumber != null) getSubjectsForGradeNumber(gradeNumber) else emptyList()
+        } catch (e: Exception) {
+            return@withContext emptyList()
+        }
     }
 
     // --- TRANSPORT ATTENDANCE ---
@@ -511,4 +553,40 @@ class FirestoreRepository(
         val snap = db.collection(collection).get().await()
         return@withContext snap.documents.map { (it.data ?: emptyMap<String, Any?>()) + mapOf("__id" to it.id) }
     }
-}
+
+    /**
+     * Crea una notificación personal en users/{userId}/notifications.
+     * Parámetros mínimos para compatibilidad con llamadas existentes:
+     *  createNotification(title, body, type, audience, userId)
+     * Los parámetros opcionales permiten marcar como leída o enlazar relatedId.
+     */
+    suspend fun createNotification(
+        title: String,
+        body: String,
+        type: String,
+        audience: String,
+        userId: String,
+        relatedId: String? = null,
+        read: Boolean = false
+    ) = withContext(Dispatchers.IO) {
+        try {
+            if (userId.isBlank()) return@withContext
+            val notifDoc = db.collection(COL_USERS).document(userId).collection("notifications").document()
+            val data = hashMapOf<String, Any?>(
+                "titulo" to title,
+                "cuerpo" to body,
+                "type" to type,
+                "audience" to audience,
+                "senderName" to (auth.currentUser?.displayName ?: auth.currentUser?.email ?: "Sistema"),
+                "remitente" to (auth.currentUser?.email ?: "Sistema"),
+                "fechaHora" to FieldValue.serverTimestamp(),
+                "leida" to read,
+                "relatedId" to (relatedId ?: "")
+            )
+            notifDoc.set(sanitizeFields(data)).await()
+        } catch (_: Exception) {
+            // ignore failures silently (caller may not require strict guarantee)
+        }
+    }
+
+ }
