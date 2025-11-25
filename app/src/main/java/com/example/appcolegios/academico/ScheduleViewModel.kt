@@ -23,18 +23,21 @@ class ScheduleViewModel : ViewModel() {
     val uiState: StateFlow<ScheduleUiState> = _uiState
 
     init {
-        loadSchedule()
+        // cargar por defecto el schedule del usuario autenticado
+        loadScheduleFor(null)
     }
 
-    private fun loadSchedule() {
+    // Public: cargar el horario para un studentId específico (si es null usa el uid autenticado)
+    fun loadScheduleFor(studentId: String?) {
         viewModelScope.launch {
-            val userId = auth.currentUser?.uid
+            val userId = studentId ?: auth.currentUser?.uid
             if (userId == null) {
                 _uiState.value = ScheduleUiState(isLoading = false, error = "Usuario no autenticado.")
                 return@launch
             }
 
             try {
+                _uiState.value = ScheduleUiState(isLoading = true)
                 val docs = repo.getSubcollectionDocuments("students", userId, "schedule")
                 val scheduleList = docs.mapNotNull { doc ->
                     try {

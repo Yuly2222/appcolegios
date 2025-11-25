@@ -75,6 +75,7 @@ import android.widget.Toast
 import com.example.appcolegios.auth.VerifyEmailScreen
 import com.example.appcolegios.teacher.TeacherHomeScreen
 import com.example.appcolegios.student.StudentHomeScreen
+import com.example.appcolegios.academico.ParentScheduleScreen
 
 @Composable
 fun AppNavigation(
@@ -207,7 +208,7 @@ fun AppNavigation(
                 val eventId = if (raw.isNullOrBlank()) null else raw
                 CalendarScreen(eventId = eventId)
             }
-            composable(AppRoutes.Schedule.route) { ScheduleScreen() }
+            composable(AppRoutes.Schedule.route) { ParentScheduleScreen() }
             composable(AppRoutes.Admin.route) { AdminScreen(navController) }
             composable(AppRoutes.AssignGroup.route) { com.example.appcolegios.admin.AssignGroupAdminScreen(navController = navController) }
             composable(AppRoutes.AdminParents.route) { AdminParentsScreen(onDone = { navController?.popBackStack() }) }
