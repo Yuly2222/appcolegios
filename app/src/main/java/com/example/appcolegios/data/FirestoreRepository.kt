@@ -460,8 +460,8 @@ class FirestoreRepository(
 
     private suspend fun updateInboxEntryFor(chatId: String, ownerId: String, otherUserId: String, lastMessage: String) = withContext(Dispatchers.IO) {
         val otherUserSnap = db.collection(COL_USERS).document(otherUserId).get().await()
-        val otherName = otherUserSnap.getString("fullName") ?: ""
-        val otherAvatar = otherUserSnap.getString("photoUrl") ?: ""
+        val otherName = otherUserSnap.getString("fullName") ?: otherUserSnap.getString("displayName") ?: otherUserId
+        val otherAvatar = otherUserSnap.getString("photoUrl") ?: otherUserSnap.getString("avatarUrl") ?: ""
 
         val inboxRef = db.collection(COL_USERS).document(ownerId).collection("inbox").document(otherUserId)
         val inboxData = hashMapOf<String, Any?>(

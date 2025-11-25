@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mantener los mismos valores que en values/colors.xml para evitar cambios globales no deseados -->
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+
+    <!-- Paleta fresca, moderna y accesible -->
+    <color name="primary">#2D8CF0</color>
+    <color name="primary_dark">#1B6FD6</color>
+    <color name="on_primary">#FFFFFFFF</color>
+
+    <color name="secondary">#46B3FF</color>
+    <color name="secondary_dark">#1B6FD6</color>
+    <color name="on_secondary">#FFFFFFFF</color>
+
+    <color name="tertiary">#46B3FF</color>
+
+    <color name="background">#F6F9FF</color>
+    <color name="on_background">#222B45</color>
+
+    <color name="surface">#FFFFFFFF</color>
+    <color name="on_surface">#222B45</color>
+    <color name="on_surface_variant">#6B7280</color>
+
+    <color name="success">#22C55E</color>
+    <color name="warning">#F59E0B</color>
+    <color name="error">#EF4444</color>
+    <color name="on_error">#FFFFFF</color>
+
+    <color name="outline">#E5E7EB</color>
+</resources>

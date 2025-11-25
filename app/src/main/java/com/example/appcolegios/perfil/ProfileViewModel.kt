@@ -176,17 +176,18 @@ class ProfileViewModel : ViewModel() {
                     val studentMap = repo.getDocumentData("students", userId)
                     if (studentMap != null) {
                         Log.d(TAG, "loadStudentData: found students/$userId")
-                        // Mapear manualmente para soportar campos 'nombre' o 'name'
+                        // Usar sólo el campo 'fullName' para el nombre, según nuevo requerimiento
                         val rawCurso = studentMap["curso"] as? String ?: (studentMap["course"] as? String ?: "")
                         val rawGrupo = studentMap["grupo"] as? String ?: (studentMap["group"] as? String ?: "")
                         val (cursoFromRaw, grupoFromRaw) = normalizeCourseKey(rawCurso)
 
-                        val preferredName = (studentMap["nombre"] as? String) ?: (studentMap["name"] as? String) ?: (studentMap["displayName"] as? String)
+                        // Leer únicamente 'fullName' como nombre mostrado
+                        val preferredName = studentMap["fullName"] as? String ?: ""
                         val promedioVal = try { (studentMap["promedio"] as? Number)?.toDouble() ?: 0.0 } catch (_: Exception) { 0.0 }
                         val avatarVal = studentMap["avatarUrl"] as? String ?: studentMap["photoUrl"] as? String ?: studentMap["avatar"] as? String
                         val studentData = Student(
                             id = userId,
-                            nombre = preferredName ?: "",
+                            nombre = preferredName,
                             curso = if (cursoFromRaw.isNotBlank()) cursoFromRaw else (studentMap["curso"] as? String ?: studentMap["course"] as? String ?: ""),
                             grupo = if (grupoFromRaw.isNotBlank()) grupoFromRaw else rawGrupo,
                             promedio = promedioVal,
@@ -218,6 +219,7 @@ class ProfileViewModel : ViewModel() {
                                 var merged = fallbackFromGrupos.copy(
                                      curso = if (cursoNormalized.isNotBlank()) cursoNormalized else fallbackFromGrupos.curso,
                                      grupo = if (grupoNormalized.isNotBlank()) grupoNormalized else (grupoFromUserRaw ?: fallbackFromGrupos.grupo),
+                                     // preferir fullName en users
                                      nombre = fallbackFromGrupos.nombre.ifBlank { (userDocMap["fullName"] as? String) ?: fallbackFromGrupos.nombre },
                                      avatarUrl = fallbackFromGrupos.avatarUrl ?: (userDocMap["avatarUrl"] as? String ?: userDocMap["photoUrl"] as? String ?: userDocMap["avatar"] as? String)
                                  )
@@ -273,7 +275,8 @@ class ProfileViewModel : ViewModel() {
             try {
                 val teacherMap = repo.getDocumentData("teachers", userId)
                 if (teacherMap != null) {
-                    val nombre = teacherMap["fullName"] as? String ?: teacherMap["name"] as? String
+                    // Usar únicamente fullName para docentes
+                    val nombre = teacherMap["fullName"] as? String
                     val email = teacherMap["email"] as? String ?: auth.currentUser?.email
                     val phone = teacherMap["phone"] as? String
                     val photoBase64 = teacherMap["photoBase64"] as? String
@@ -288,7 +291,7 @@ class ProfileViewModel : ViewModel() {
 
                 val userDocMap = repo.getDocumentData("users", userId)
                 if (userDocMap != null) {
-                    val nombre = userDocMap["displayName"] as? String ?: userDocMap["name"] as? String
+                    val nombre = userDocMap["fullName"] as? String
                     val email = userDocMap["email"] as? String ?: auth.currentUser?.email
                     val phone = userDocMap["phone"] as? String
                     val photoBase64 = userDocMap["photoBase64"] as? String
@@ -323,7 +326,8 @@ class ProfileViewModel : ViewModel() {
                         val studentsWithParent = repo.queryWhereArrayContains("students", "parents", userId)
                         for (docMap in studentsWithParent) {
                             val id = docMap["__id"] as? String ?: continue
-                            val name = docMap["nombre"] as? String ?: docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                            // leer solo fullName
+                            val name = docMap["fullName"] as? String ?: ""
                             val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
                             val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
                             val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
@@ -351,7 +355,7 @@ class ProfileViewModel : ViewModel() {
                         val byIdQuery = repo.queryWhereEqual("students", "acudienteId", userId)
                         for (docMap in byIdQuery) {
                             val id = docMap["__id"] as? String ?: continue
-                            val name = docMap["nombre"] as? String ?: docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                            val name = docMap["fullName"] as? String ?: ""
                             val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
                             val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
                             val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
@@ -379,7 +383,7 @@ class ProfileViewModel : ViewModel() {
                         val byEmailQuery = repo.queryWhereEqual("students", "acudienteEmail", userEmail)
                         for (docMap in byEmailQuery) {
                             val id = docMap["__id"] as? String ?: continue
-                            val name = docMap["nombre"] as? String ?: docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                            val name = docMap["fullName"] as? String ?: ""
                             val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
                             val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
                             val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
@@ -407,7 +411,7 @@ class ProfileViewModel : ViewModel() {
                         val usersParents = repo.queryWhereArrayContains("users", "parents", userId)
                         for (docMap in usersParents) {
                             try {
-                                val name = docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                                val name = docMap["fullName"] as? String ?: ""
                                 val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
                                 val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
                                 val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
@@ -438,7 +442,7 @@ class ProfileViewModel : ViewModel() {
                         val usersByAcudienteEmail = repo.queryWhereEqual("users", "acudienteEmail", userEmail)
                         for (docMap in usersByAcudienteEmail) {
                             try {
-                                val name = docMap["name"] as? String ?: docMap["displayName"] as? String ?: ""
+                                val name = docMap["fullName"] as? String ?: ""
                                 val curso = docMap["curso"] as? String ?: docMap["course"] as? String ?: ""
                                 val grupo = docMap["grupo"] as? String ?: docMap["group"] as? String ?: ""
                                 val rawAvatar = docMap["avatarUrl"] as? String ?: docMap["photoUrl"] as? String ?: docMap["avatar"] as? String
@@ -473,13 +477,13 @@ class ProfileViewModel : ViewModel() {
                         try {
                             // Preferir students/{id} si existe
                             val stDocMap = repo.getDocumentData("students", s.id)
-                            val nameFromStudents = stDocMap?.let { it["nombre"] as? String ?: it["name"] as? String ?: it["displayName"] as? String } ?: ""
+                            val nameFromStudents = stDocMap?.let { it["fullName"] as? String } ?: ""
                             if (nameFromStudents.isNotBlank()) {
                                 finalList.add(s.copy(nombre = nameFromStudents))
                                 continue
                             }
                             val uDocMap = repo.getDocumentData("users", s.id)
-                            val nameFromUsers = uDocMap?.let { it["name"] as? String ?: it["displayName"] as? String } ?: ""
+                            val nameFromUsers = uDocMap?.let { it["fullName"] as? String } ?: ""
                             if (nameFromUsers.isNotBlank()) {
                                 finalList.add(s.copy(nombre = nameFromUsers))
                                 continue

@@ -88,15 +88,28 @@ package com.example.appcolegios.mensajes
                  // Ahora podemos atachar el listener de forma segura
                  val conversationRef = db.collection("chats").document(convId).collection("messages")
                  messagesListener = conversationRef
-                     .orderBy("fechaHora", Query.Direction.ASCENDING)
+                     .orderBy("timestamp", Query.Direction.ASCENDING)
                      .addSnapshotListener { snapshot, error ->
                          if (error != null) {
                              _uiState.value = ChatUiState(isLoading = false, error = error.message, otherUserName = _uiState.value.otherUserName, otherUserAvatarUrl = _uiState.value.otherUserAvatarUrl)
                              return@addSnapshotListener
                          }
                          if (snapshot != null) {
-                             val messages = snapshot.toObjects(Message::class.java)
-                             _uiState.value = _uiState.value.copy(messages = messages, isLoading = false)
+                             val list = snapshot.documents.mapNotNull { doc ->
+                                try {
+                                    val id = doc.id
+                                    val fromId = doc.getString("fromId") ?: ""
+                                    val toId = doc.getString("toId") ?: ""
+                                    val texto = doc.getString("texto") ?: doc.getString("text") ?: ""
+                                    val ts = (doc.getTimestamp("fechaHora") ?: doc.getTimestamp("timestamp"))?.toDate() ?: Date(0)
+                                    val tipo = try { MessageType.valueOf(doc.getString("tipo") ?: doc.getString("type") ?: "TEXTO") } catch (_: Exception) { MessageType.TEXTO }
+                                    val estado = try { MessageStatus.valueOf(doc.getString("estado") ?: doc.getString("status") ?: "ENVIADO") } catch (_: Exception) { MessageStatus.ENVIADO }
+                                    Message(id = id, fromId = fromId, toId = toId, texto = texto, fechaHora = ts, tipo = tipo, estado = estado)
+                                } catch (e: Exception) {
+                                    null
+                                }
+                            }
+                            _uiState.value = _uiState.value.copy(messages = list, isLoading = false)
                          } else {
                              _uiState.value = _uiState.value.copy(messages = emptyList(), isLoading = false)
                          }
@@ -176,7 +189,7 @@ package com.example.appcolegios.mensajes
 
                  // Attach listener to messages subcollection
                  val convRef = db.collection("chats").document(chatDocId).collection("messages")
-                 messagesListener = convRef.orderBy("fechaHora", Query.Direction.ASCENDING)
+                 messagesListener = convRef.orderBy("timestamp", Query.Direction.ASCENDING)
                      .addSnapshotListener { snapshots, error ->
                          if (error != null) {
                              onError(error.message ?: "Error desconocido")
@@ -184,11 +197,22 @@ package com.example.appcolegios.mensajes
                              return@addSnapshotListener
                          }
                          if (snapshots != null) {
-                             val msgs = snapshots.toObjects(Message::class.java)
-                             onChange(msgs)
-                             _uiState.value = _uiState.value.copy(messages = msgs, isLoading = false)
-                         }
-                     }
+                             val msgs = snapshots.documents.mapNotNull { doc ->
+                                try {
+                                    val id = doc.id
+                                    val fromId = doc.getString("fromId") ?: ""
+                                    val toId = doc.getString("toId") ?: ""
+                                    val texto = doc.getString("texto") ?: doc.getString("text") ?: ""
+                                    val ts = (doc.getTimestamp("fechaHora") ?: doc.getTimestamp("timestamp"))?.toDate() ?: Date(0)
+                                    val tipo = try { MessageType.valueOf(doc.getString("tipo") ?: doc.getString("type") ?: "TEXTO") } catch (_: Exception) { MessageType.TEXTO }
+                                    val estado = try { MessageStatus.valueOf(doc.getString("estado") ?: doc.getString("status") ?: "ENVIADO") } catch (_: Exception) { MessageStatus.ENVIADO }
+                                    Message(id = id, fromId = fromId, toId = toId, texto = texto, fechaHora = ts, tipo = tipo, estado = estado)
+                                } catch (_: Exception) { null }
+                            }
+                            onChange(msgs)
+                            _uiState.value = _uiState.value.copy(messages = msgs, isLoading = false)
+                        }
+                    }
              } catch (e: Exception) {
                  onError(e.message ?: "Error listening course chat")
                  _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
