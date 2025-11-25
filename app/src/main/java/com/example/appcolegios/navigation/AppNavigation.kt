@@ -94,7 +94,8 @@ fun AppNavigation(
         AppRoutes.Login.route,
         AppRoutes.Register.route,
         AppRoutes.VerifyEmail.route,
-        AppRoutes.ResetPassword.route
+        AppRoutes.ResetPassword.route,
+        AppRoutes.Terms.route
     )
 
     val showChrome = currentDestination?.route !in authlessRoutes
@@ -266,6 +267,11 @@ fun AppNavigation(
                         popUpTo(0) { inclusive = true }
                     }
                 })
+            }
+            composable(AppRoutes.Terms.route) {
+                // Mostrar pantalla de términos antes del login
+                val prefs = UserPreferencesRepository(LocalContext.current)
+                com.example.appcolegios.auth.TermsScreen(navController = navController, userPrefs = prefs)
             }
             composable(AppRoutes.Dashboard.route) { DashboardScreen() }
             // Ruta para Configuración (Settings)

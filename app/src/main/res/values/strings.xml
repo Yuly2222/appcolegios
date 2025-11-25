@@ -225,4 +225,10 @@
     <string name="export_teachers_template">Exportar plantilla Docentes</string>
     <string name="teacher_assigned_success">Docente asignado correctamente.</string>
     <string name="teacher_found_with_uid">Docente: %1$s (uid=%2$s)</string>
+
+    <!-- Strings para términos de protección de menores -->
+    <string name="terms_title">Términos de protección de menores</string>
+    <string name="terms_subtitle">Por favor lee y acepta los términos para continuar</string>
+    <string name="terms_accept">Aceptar</string>
+    <string name="terms_reject">Rechazar</string>
 </resources>

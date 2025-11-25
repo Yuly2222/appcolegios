@@ -10,6 +10,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -28,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Composable
@@ -76,7 +79,9 @@ fun SplashScreen(navController: NavController) {
             Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "Logo",
-                modifier = Modifier.size(150.dp)
+                modifier = Modifier
+                    .size(150.dp)
+                    .clip(CircleShape)
             )
             Spacer(modifier = Modifier.height(24.dp))
             if (showError) {
@@ -115,11 +120,16 @@ suspend fun performSessionVerification(
         return
     }
 
+    // Check current firebase user and existing userData
     val firebaseUser = FirebaseAuth.getInstance().currentUser
+    // Si el usuario ya tiene session local, ir a home
     if (userData?.userId != null) {
         navController.navigate("home") { popUpTo("splash") { inclusive = true } }
         return
     }
+
+    // Leer preferencia de aceptación de términos de forma suspend
+    val acceptedPref = userPreferencesRepository.protectionTermsAccepted.first()
 
     if (firebaseUser != null) {
         try {
@@ -131,11 +141,23 @@ suspend fun performSessionVerification(
         } catch (_: Exception) {
             // ignore, defaults later
         }
+
+        // Si no aceptó términos, ir a términos
+        if (!acceptedPref) {
+            navController.navigate("terms") { popUpTo("splash") { inclusive = true } }
+            return
+        }
+
         navController.navigate("home") { popUpTo("splash") { inclusive = true } }
         return
     }
 
-    // No hay sesión: abrir LoginActivity (XML) si hay Activity disponible, si no usar navController
+    // No hay sesión: si no aceptó términos -> mostrar términos; si sí -> abrir LoginActivity
+    if (!acceptedPref) {
+        navController.navigate("terms") { popUpTo("splash") { inclusive = true } }
+        return
+    }
+
     val activity = (context as? Activity)
     activity?.let {
         it.startActivity(Intent(it, LoginActivity::class.java))

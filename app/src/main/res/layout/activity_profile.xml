@@ -31,12 +31,15 @@
                 <!-- Foto de perfil -->
                 <ImageView
                     android:id="@+id/profileImage"
-                    android:layout_width="100dp"
-                    android:layout_height="100dp"
+                    android:layout_width="120dp"
+                    android:layout_height="120dp"
                     android:layout_gravity="center"
                     android:src="@drawable/ic_launcher_foreground"
                     android:contentDescription="@string/foto_perfil_cd"
-                    android:layout_marginBottom="16dp" />
+                    android:layout_marginBottom="16dp"
+                    android:background="@drawable/circle_bg"
+                    android:scaleType="centerCrop"
+                    android:clipToOutline="true" />
 
                 <!-- Nombre -->
                 <TextView

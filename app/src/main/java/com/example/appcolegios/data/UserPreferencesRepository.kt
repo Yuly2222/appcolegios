@@ -28,6 +28,8 @@ class UserPreferencesRepository(context: Context) {
         val DARK_MODE = booleanPreferencesKey("dark_mode_enabled")
         val FONT_SIZE = intPreferencesKey("font_size_enum") // 0=Small,1=Normal,2=Large
         val PUSH_NOTIFICATIONS = booleanPreferencesKey("push_notifications_enabled")
+        // Aceptación de términos de protección de menores
+        val PROTECTION_TERMS_ACCEPTED = booleanPreferencesKey("protection_terms_accepted")
     }
 
     val userData: Flow<UserData> = dataStore.data
@@ -44,6 +46,7 @@ class UserPreferencesRepository(context: Context) {
     val darkModeEnabled: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.DARK_MODE] ?: false }
     val fontSizeEnum: Flow<Int> = dataStore.data.map { it[PreferencesKeys.FONT_SIZE] ?: 1 }
     val pushNotificationsEnabled: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.PUSH_NOTIFICATIONS] ?: true }
+    val protectionTermsAccepted: Flow<Boolean> = dataStore.data.map { it[PreferencesKeys.PROTECTION_TERMS_ACCEPTED] ?: false }
 
     // Actualiza userId, role y displayName
     suspend fun updateUserData(userId: String?, role: String?, name: String?) {
@@ -81,6 +84,11 @@ class UserPreferencesRepository(context: Context) {
 
     suspend fun setPushNotificationsEnabled(enabled: Boolean) {
         dataStore.edit { prefs -> prefs[PreferencesKeys.PUSH_NOTIFICATIONS] = enabled }
+    }
+
+    // Guardar/leer aceptación de términos de protección de menores
+    suspend fun setProtectionTermsAccepted(accepted: Boolean) {
+        dataStore.edit { prefs -> prefs[PreferencesKeys.PROTECTION_TERMS_ACCEPTED] = accepted }
     }
 
     // Limpia todos los datos del usuario al cerrar sesión
